@@ -61,70 +61,31 @@ def extract_structure(img_path, dest_path, structure):
 
     filename = os.path.basename(img_path)
 
+    # Determinar los valores correspondientes a cada estructura
     if structure == "amygdala":
-        left_amygdala = np.where(data == 18, data, 0)
-        left_img = nib.Nifti1Image(left_amygdala, img.affine, img.header)
-        left_output_path = os.path.join(dest_path, filename.replace(".mgz", "_left_amygdala.nii"))
-        left_img = preprocess_image_file_for_anomaly_detection(left_img)
-        nib.save(left_img, left_output_path)
-
-        right_amygdala = np.where(data == 54, data, 0)
-        right_img = nib.Nifti1Image(right_amygdala, img.affine, img.header)
-        right_output_path = os.path.join(dest_path, filename.replace(".mgz", "_right_amygdala.nii"))
-        right_img = preprocess_image_file_for_anomaly_detection(right_img)
-        nib.save(right_img, right_output_path)
-
+        left_value, right_value = 18, 54
     elif structure == "putamen":
-        left_putamen = np.where(data == 12, data, 0)
-        left_img = nib.Nifti1Image(left_putamen, img.affine, img.header)
-        left_output_path = os.path.join(dest_path, filename.replace(".mgz", "_left_putamen.nii"))
-        left_img = preprocess_image_file_for_anomaly_detection(left_img)
-        nib.save(left_img, left_output_path)
-
-        right_putamen = np.where(data == 51, data, 0)
-        right_img = nib.Nifti1Image(right_putamen, img.affine, img.header)
-        right_output_path = os.path.join(dest_path, filename.replace(".mgz", "_right_putamen.nii"))
-        right_img = preprocess_image_file_for_anomaly_detection(right_img)
-        nib.save(right_img, right_output_path)
-
+        left_value, right_value = 12, 51
     elif structure == "pallidum":
-        left_pallidum = np.where(data == 13, data, 0)
-        left_img = nib.Nifti1Image(left_pallidum, img.affine, img.header)
-        left_output_path = os.path.join(dest_path, filename.replace(".mgz", "_left_pallidum.nii"))
-        left_img = preprocess_image_file_for_anomaly_detection(left_img)
-        nib.save(left_img, left_output_path)
-
-        right_pallidum = np.where(data == 52, data, 0)
-        right_img = nib.Nifti1Image(right_pallidum, img.affine, img.header)
-        right_output_path = os.path.join(dest_path, filename.replace(".mgz", "_right_pallidum.nii"))
-        right_img = preprocess_image_file_for_anomaly_detection(right_img)
-        nib.save(right_img, right_output_path)
-
+        left_value, right_value = 13, 52
     elif structure == "hippocampus":
-        left_hippocampus = np.where(data == 17, data, 0)
-        left_img = nib.Nifti1Image(left_hippocampus, img.affine, img.header)
-        left_output_path = os.path.join(dest_path, filename.replace(".mgz", "_left_hippocampus.nii"))
-        left_img = preprocess_image_file_for_anomaly_detection(left_img)
-        nib.save(left_img, left_output_path)
-
-        right_hippocampus = np.where(data == 53, data, 0)
-        right_img = nib.Nifti1Image(right_hippocampus, img.affine, img.header)
-        right_output_path = os.path.join(dest_path, filename.replace(".mgz", "_right_hippocampus.nii"))
-        right_img = preprocess_image_file_for_anomaly_detection(right_img)
-        nib.save(right_img, right_output_path)
-
+        left_value, right_value = 17, 53
     elif structure == "thalamus":
-        left_thalamus = np.where(data == 10, data, 0)
-        left_img = nib.Nifti1Image(left_thalamus, img.affine, img.header)
-        left_output_path = os.path.join(dest_path, filename.replace(".mgz", "_left_thalamus.nii"))
-        left_img = preprocess_image_file_for_anomaly_detection(left_img)
-        nib.save(left_img, left_output_path)
+        left_value, right_value = 10, 49
 
-        right_thalamus = np.where(data == 49, data, 0)
-        right_img = nib.Nifti1Image(right_thalamus, img.affine, img.header)
-        right_output_path = os.path.join(dest_path, filename.replace(".mgz", "_right_thalamus.nii"))
-        right_img = preprocess_image_file_for_anomaly_detection(right_img)
-        nib.save(right_img, right_output_path)
+    # Extraer las estructuras
+    left_structure = np.where(data == left_value, data, 0)
+    left_img = nib.Nifti1Image(left_structure, img.affine, img.header)
+    left_output_path = os.path.join(dest_path, filename.replace(".mgz", f"_left_{structure}.nii"))
+    left_img = preprocess_image_file_for_anomaly_detection(left_img)
+    nib.save(left_img, left_output_path)
+
+    right_structure = np.where(data == right_value, data, 0)
+    right_img = nib.Nifti1Image(right_structure, img.affine, img.header)
+    right_output_path = os.path.join(dest_path, filename.replace(".mgz", f"_right_{structure}.nii"))
+    right_img = preprocess_image_file_for_anomaly_detection(right_img)
+    nib.save(right_img, right_output_path)
+
 
     
 
@@ -137,7 +98,6 @@ def process_directory(input_dir, dest_dir, structure):
                 output_path = os.path.join(dest_dir, relative_path)
                 os.makedirs(output_path, exist_ok=True)
                 extract_structure(img_path, output_path, structure)
-                print(f"Estructuras extraídas y guardadas en {output_path}")
 
 parser = argparse.ArgumentParser(description="Extraer estructuras de imágenes .mgz en una carpeta")
 parser.add_argument("input_dir", help="Ruta del directorio de entrada con imágenes .mgz")
