@@ -1,2 +1,4 @@
 nibabel
 numpy
+scikit-image
+
