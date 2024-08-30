@@ -24,7 +24,7 @@ donde:
 ejemplo completo:
 
 
-docker run --rm -v D:\Documents\FastSurfer\Imagenes\ixi\GUY:/data -v D:\Documents\FastSurfer\duilio\pruebas:/output fslabel r_IXI023-Guys-0699-IXI3DMPRAG_-s231_-0401-00004-000001-01.nii /output amygdala
+docker run --rm -v D:\Documents\FastSurfer\Imagenes\ixi\GUY:/data -v D:\Documents\FastSurfer\duilio\pruebas:/output fslabel /data/r_IXI023-Guys-0699-IXI3DMPRAG_-s231_-0401-00004-000001-01.nii /output amygdala
 
 en este ejemplo de la imagen "r_IXI002-Guys-0828-MPRAGESEN_-s256_-0301-00003-000001-01.nii" se va a segmentar para proximamente extraer los labels "left_amygdala" y "rigth_amygdala" y van a quedar en "/Documents/FastSurfer/output" 
 como 2 archivos .nii 

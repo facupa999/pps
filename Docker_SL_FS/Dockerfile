@@ -6,8 +6,11 @@ WORKDIR /app
 
 # Instala las dependencias necesarias para el script de Python
 RUN apt-get update && apt-get install -y python3-pip
-RUN pip3 install nibabel numpy 
+RUN pip install nibabel numpy 
 RUN pip install streamlit==1.29.0
+RUN pip install scikit-image
+RUN pip install torch
+
 
 # Copia los scripts de Python, el archivo de licencia y otros archivos necesarios al contenedor
 COPY Una_imagen.py /app/Una_imagen.py
@@ -17,6 +20,7 @@ COPY fast_surfer.sh /app/fast_surfer.sh
 COPY run_fastsurfer.sh /app/run_fastsurfer.sh
 COPY thalamus.pt /app/thalamus.pt
 COPY Models /app/Models
+
 
 # Establecer permisos y variable de entorno para la licencia
 RUN chmod 644 /app/fs_license/license.txt

@@ -6,6 +6,7 @@ import subprocess
 import pandas as pd
 import torch
 import shutil
+import skimage.transform as skTrans
 
 import matplotlib.pyplot as plt
 from matplotlib.patches import Wedge
@@ -37,7 +38,7 @@ def extract_structure(img_path, structure):
     img = nib.load(img_path)
     data = img.get_fdata()
 
-    filename = os.path.basename(img_path).replace(".mgz", "")
+    filename = os.path.basename(img_path)
     output_files = []
 
     # Determinar los valores correspondientes a cada estructura
@@ -55,13 +56,17 @@ def extract_structure(img_path, structure):
     # Extraer las estructuras
     left_structure = np.where(data == left_value, data, 0)
     left_img = nib.Nifti1Image(left_structure, img.affine, img.header)
-    left_output_path = os.path.join("/app", f"{filename}_left_{structure}.nii")
+    left_output_path = os.path.join("/app", filename.replace(".mgz", f"_left_{structure}.nii"))
+    left_img = preprocess_image_file_for_anomaly_detection(left_img)
     nib.save(left_img, left_output_path)
     output_files.append(left_output_path)
 
+
+
     right_structure = np.where(data == right_value, data, 0)
     right_img = nib.Nifti1Image(right_structure, img.affine, img.header)
-    right_output_path = os.path.join("/app", f"{filename}_right_{structure}.nii")
+    right_output_path = os.path.join("/app", filename.replace(".mgz", f"_right_{structure}.nii"))
+    right_img = preprocess_image_file_for_anomaly_detection(right_img)
     nib.save(right_img, right_output_path)
     output_files.append(right_output_path)
 
@@ -288,7 +293,45 @@ def asimetria(image,imagepair,structure):
     # Mostrar el gráfico en streamlit
     st.pyplot(fig)
 
+def margin(x,tolerance):
+    y = (x*tolerance)
+    left = right = int(y)
+    return left,right
 
+def crop_hipp_image_around_boundig_box (raw_image,tolerance):
+    image = raw_image.get_fdata()
+    mask = image == 0
+    coords = np.array(np.nonzero(~mask))
+    top_left = np.min(coords, axis=1)
+    bottom_left = np.max(coords, axis=1)
+
+    span_x = bottom_left[0]-top_left[0]
+    span_y = bottom_left[1]-top_left[1]
+    span_z = bottom_left[2]-top_left[2]
+    var_center_x = top_left[0] + int(span_x/2)
+    var_center_y = top_left[1] + int(span_y/2)
+    var_center_z = top_left[2] + int(span_z/2)
+  
+    crop_image = image[var_center_x - 32:var_center_x + 32,
+                      var_center_y - 32:var_center_y + 32,
+                      var_center_z - 32:var_center_z + 32]
+
+    return nib.Nifti1Image(crop_image.astype(float), raw_image.affine) 
+
+def resize_image_to_match_hippocampal_boundig_box (new_image, image_size):
+    im = new_image.get_fdata()
+    result1 = skTrans.resize(im, image_size, order=1, preserve_range=True)
+    return nib.Nifti1Image(result1.astype(float), new_image.affine) 
+  
+def preprocess_image_file_for_anomaly_detection(hippocampal_mri: np.array, image_size: int = (64,64,64), is_test: bool = False, tolerance : float = 0.25):
+    """Preprocess an input image for anomaly detection.
+    """
+      # crop the image
+    new_image = crop_hipp_image_around_boundig_box(hippocampal_mri, tolerance=tolerance)
+      # and downsize it
+    new_image = resize_image_to_match_hippocampal_boundig_box(new_image, image_size)
+
+    return new_image
 
 
 
@@ -301,5 +344,12 @@ with tab2:
 
 with tab3:
     tab_3()
+
+
+
+
+
+
+
 
 
