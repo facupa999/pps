@@ -20,6 +20,10 @@ COPY fast_surfer.sh /app/fast_surfer.sh
 COPY run_fastsurfer.sh /app/run_fastsurfer.sh
 COPY thalamus.pt /app/thalamus.pt
 COPY Models /app/Models
+ENV FASTSURFER_HOME=/fastsurfer
+
+
+
 
 
 # Establecer permisos y variable de entorno para la licencia
