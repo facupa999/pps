@@ -2,7 +2,7 @@
 FROM deepmi/fastsurfer:cpu-latest
 
 # Establecer el directorio de trabajo en /app
-WORKDIR /app
+WORKDIR /fastsurfer
 
 # Instala las dependencias necesarias para el script de Python
 RUN apt-get update && apt-get install -y python3-pip
@@ -13,13 +13,11 @@ RUN pip install torch
 
 
 # Copia los scripts de Python, el archivo de licencia y otros archivos necesarios al contenedor
-COPY Una_imagen.py /app/Una_imagen.py
-COPY pages/Muchas_imagenes.py /app/pages/Muchas_imagenes.py
-COPY fs_license/license.txt /app/fs_license/license.txt
-COPY fast_surfer.sh /app/fast_surfer.sh
-COPY run_fastsurfer.sh /app/run_fastsurfer.sh
-COPY thalamus.pt /app/thalamus.pt
-COPY Models /app/Models
+COPY Una_imagen.py /fastsurfer/Una_imagen.py
+COPY pages/Muchas_imagenes.py /fastsurfer/pages/Muchas_imagenes.py
+COPY fs_license/license.txt /fastsurfer/fs_license/license.txt
+COPY fast_surfer.sh /fastsurfer/fast_surfer.sh
+COPY Models /fastsurfer/Models
 ENV FASTSURFER_HOME=/fastsurfer
 
 
@@ -27,8 +25,8 @@ ENV FASTSURFER_HOME=/fastsurfer
 
 
 # Establecer permisos y variable de entorno para la licencia
-RUN chmod 644 /app/fs_license/license.txt
-ENV FS_LICENSE=/app/fs_license/license.txt
+RUN chmod 644 /fastsurfer/fs_license/license.txt
+ENV FS_LICENSE=/fastsurfer/fs_license/license.txt
 
 # puerto en el que correrá Streamlit (8501 por defecto)
 EXPOSE 8501

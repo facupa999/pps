@@ -24,7 +24,7 @@ st.sidebar.subheader("Aqui podras trabajar de a una imagen")
 
 
 # Directorio donde se guardarán los archivos CSV
-CSV_DIRECTORY = "/app/csv_results"
+CSV_DIRECTORY = "/fastsurfer/csv_results"
 
 # Crear el directorio si no existe
 os.makedirs(CSV_DIRECTORY, exist_ok=True)
@@ -56,7 +56,7 @@ def extract_structure(img_path, structure):
     # Extraer las estructuras
     left_structure = np.where(data == left_value, data, 0)
     left_img = nib.Nifti1Image(left_structure, img.affine, img.header)
-    left_output_path = os.path.join("/app", filename.replace(".mgz", f"_left_{structure}.nii"))
+    left_output_path = os.path.join("/fastsurfer", filename.replace(".mgz", f"_left_{structure}.nii"))
     left_img = preprocess_image_file_for_anomaly_detection(left_img)
     nib.save(left_img, left_output_path)
     output_files.append(left_output_path)
@@ -65,7 +65,7 @@ def extract_structure(img_path, structure):
 
     right_structure = np.where(data == right_value, data, 0)
     right_img = nib.Nifti1Image(right_structure, img.affine, img.header)
-    right_output_path = os.path.join("/app", filename.replace(".mgz", f"_right_{structure}.nii"))
+    right_output_path = os.path.join("/fastsurfer", filename.replace(".mgz", f"_right_{structure}.nii"))
     right_img = preprocess_image_file_for_anomaly_detection(right_img)
     nib.save(right_img, right_output_path)
     output_files.append(right_output_path)
@@ -108,16 +108,16 @@ def segmentar(img_path, name_subject):
     with st.spinner('Segmentando la imagen, por favor espera...'):
         try:
             # Ruta completa al script dentro del contenedor
-            command = ["bash", "/app/fast_surfer.sh", img_path, "/app", name_subject]
+            command = ["bash", "/fastsurfer/fast_surfer.sh", img_path, "/fastsurfer", name_subject]
             subprocess.run(command, capture_output=True, text=True, check=True)
             st.success("Segmentación completada exitosamente.")
         except subprocess.CalledProcessError as e:
             st.error(f"Error al ejecutar el script: {e.stderr}")
 
-    segmentation_path = os.path.join("/app", name_subject, "mri", "aparc.DKTatlas+aseg.deep.mgz")
-    final_path = os.path.join("/app", f"{name_subject}.mgz")
+    segmentation_path = os.path.join("/fastsurfer", name_subject, "mri", "aparc.DKTatlas+aseg.deep.mgz")
+    final_path = os.path.join("/fastsurfer", f"{name_subject}.mgz")
     shutil.move(segmentation_path, final_path)
-    shutil.rmtree(os.path.join("/app", name_subject))
+    shutil.rmtree(os.path.join("/fastsurfer", name_subject))
     output_segmentation_files.append(final_path)
     st.session_state.output_segmentation_files.extend(output_segmentation_files)
 
@@ -132,7 +132,7 @@ def tab_1():
     # Subir archivo
     uploaded_file = st.file_uploader("Subir archivo .nii", type=["nii"])
     if uploaded_file is not None:
-        img_path = os.path.join("/app", uploaded_file.name)
+        img_path = os.path.join("/fastsurfer", uploaded_file.name)
         with open(img_path, "wb") as f:
             f.write(uploaded_file.getbuffer())
 
@@ -171,7 +171,7 @@ def tab_2():
     img_path2 = None
 
     if uploaded_file2 is not None:
-        img_path2 = os.path.join("/app", uploaded_file2.name)
+        img_path2 = os.path.join("/fastsurfer", uploaded_file2.name)
         with open(img_path2, "wb") as f:
             f.write(uploaded_file2.getbuffer())
     elif selected_file is not None:
@@ -238,18 +238,48 @@ def asimetria(image,imagepair,structure):
 
     
     # Model class must be defined somewhere
-    model = torch.load(f"/app/{structure}.pt")
+    model = torch.load(f"/fastsurfer/Models/{structure}.pt")
     model.eval()
 
     inference = model(Example_input).cpu().detach().numpy()
-
-    c=torch.from_numpy(np.array([-7.3644e-04,  2.5405e-04, -3.1788e-03, -1.6109e-03, -7.6053e-04,
-            -5.0173e-04,  2.2761e-03,  1.0202e-03, -2.8073e-03,  1.0238e-03,
-            3.1727e-04, -1.2766e-03,  3.5283e-05, -7.2480e-04, -2.5971e-04,
-            9.8939e-04, -1.7135e-03,  1.4254e-03,  1.3150e-05, -1.0366e-03,
-            -9.3122e-04, -1.1257e-03, -1.0345e-03,  1.4835e-03,  1.4995e-03,
-            1.2943e-03, -9.0330e-04,  1.8791e-03,  6.6228e-04, -2.2420e-04,
-            3.5120e-03,  3.4326e-03]))
+    if structure == "amygdala":
+        c=torch.from_numpy(np.array([ 1.1995e-03, -9.0719e-05,  2.2601e-04, -1.6296e-04,  1.2889e-04,
+     	7.9593e-04, -4.6107e-04,  9.3010e-05,  2.6274e-04, -4.4553e-04,
+     	2.0372e-04, -2.7011e-04, -7.7813e-04, -3.4863e-04,  4.8828e-04,
+     	2.0638e-04, -7.3941e-04, -8.4966e-04, -1.0506e-03, -2.0882e-04,
+    	-7.3310e-04,  8.1595e-05, -2.3642e-04,  1.3975e-04, -6.8821e-05,
+     	3.7211e-04, -9.4548e-04,  3.9856e-04,  3.9226e-04, -2.1122e-05,
+    	-4.1044e-04,  1.0118e-03]))
+    elif structure == "putamen":
+        c=torch.from_numpy(np.array([-6.0157e-04, -2.4639e-03, -1.1748e-04, -2.6048e-04,  1.0129e-03,
+    	-1.5707e-03,  1.4672e-03,  4.5265e-04, -4.3584e-04,  1.3319e-04,
+    	-1.9649e-03, -2.6121e-04,  7.0604e-04, -1.2275e-03, -4.4771e-04,
+    	-5.7263e-04,  5.2476e-04, -1.4224e-03, -1.1021e-03,  3.9382e-04,
+     	1.6061e-03, -1.3993e-03, -1.2486e-04, -1.4451e-03,  1.3612e-05,
+     	2.1086e-05,  1.0144e-03, -9.1855e-04, -1.8682e-03,  4.3085e-04,
+     	1.2417e-03, -9.9061e-04]))
+    elif structure == "pallidum":
+        c=torch.from_numpy(np.array([ 1.2615e-03, -9.8757e-04,  3.3690e-04,  8.8020e-04,  1.9845e-03,
+     	2.8372e-04, -1.5581e-03, -2.5303e-04, -2.8048e-05, -5.8833e-04,
+     	2.2088e-04, -1.0752e-03, -9.9092e-04, -8.4401e-04,  4.2088e-04,
+    	-2.7957e-04, -2.0193e-04,  3.4747e-04,  8.4916e-05,  2.2653e-04,
+    	-5.0316e-04, -1.5247e-03,  1.3997e-03,  1.6661e-03, -5.5025e-04,
+    	-7.6762e-04,  1.0199e-03,  1.7472e-04,  2.8011e-04,  1.3499e-04,
+     	1.5556e-03,  4.8420e-04]))
+    elif structure == "hippocampus":
+        c=torch.from_numpy(np.array([ 0.0118,  0.0097,  0.0113, -0.0100, -0.0113, -0.0136,  0.0107,  0.0092,
+    	-0.0130,  0.0136, -0.0119, -0.0129, -0.0119, -0.0127, -0.0107,  0.0116,
+    	-0.0111, -0.0151,  0.0108,  0.0113, -0.0118, -0.0112, -0.0104,  0.0136,
+     	0.0112, -0.0115,  0.0129,  0.0114,  0.0115, -0.0120, -0.0074,  0.0113]))
+    elif structure == "thalamus":
+        c=torch.from_numpy(np.array([-7.3644e-04,  2.5405e-04, -3.1788e-03, -1.6109e-03, -7.6053e-04,
+                -5.0173e-04,  2.2761e-03,  1.0202e-03, -2.8073e-03,  1.0238e-03,
+                3.1727e-04, -1.2766e-03,  3.5283e-05, -7.2480e-04, -2.5971e-04,
+                9.8939e-04, -1.7135e-03,  1.4254e-03,  1.3150e-05, -1.0366e-03,
+                -9.3122e-04, -1.1257e-03, -1.0345e-03,  1.4835e-03,  1.4995e-03,
+                1.2943e-03, -9.0330e-04,  1.8791e-03,  6.6228e-04, -2.2420e-04,
+                3.5120e-03,  3.4326e-03]))
+        
 
     NORAH_index = torch.sum((torch.from_numpy(inference) - c) ** 2, dim=1).numpy()
     st.write(f"El indice Norah es: {NORAH_index*200000}")

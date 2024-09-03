@@ -2,33 +2,9 @@ Modo de uso:
  
 1. Construir la imagen Docker:
 
-docker build -t labels .
+docker build -t stlabels .
 
-2. puedes usar el siguiente comando para ejecutar el script y extraer las regiones de interés:
+2. correrlo en el puerto 8501:
 
-docker run --rm -v /ruta/a/la/carpeta/con/imagenes:/data 
-	   -v ruta/a/la/carpeta/de/salida:/output 
-	   fslabel /data/nombre_imagen.nii /output label
-
-
-donde: 
-
--"/ruta/a/la/carpeta/con/imagenes" es la carpeta en tu máquina local donde se encuentra la imagen de entrada
-
--"nombre_imagen.mgz" es el nombre de la imagen de entrada
-
--"/ruta/a/la/carpeta/de/salida" es la carpeta en tu máquina local donde quieres guardar las imágenes resultantes
-
--"label" es La etiqueta que deseas extraer (por ejemplo, amygdala), pueden ser tambien "putamen", "pallidum", "hippocampus" o "thalamus"
-
-ejemplo completo:
-
-
-docker run --rm -v D:\Documents\FastSurfer\Imagenes\ixi\GUY:/data 
-	   -v D:\Documents\FastSurfer\pruebas:/output 
-           fslabel /data/r_IXI002-Guys-0828-MPRAGESEN_-s256_-0301-00003-000001-01.nii /output amygdala
-
-en este ejemplo de la imagen "r_IXI002-Guys-0828-MPRAGESEN_-s256_-0301-00003-000001-01.nii" se va a segmentar para proximamente extraer los labels "left_amygdala" y "rigth_amygdala" y van a quedar en "/Documents/FastSurfer/output" 
-como 2 archivos .nii 
-
+docker run -p 8501:8501 stlabel
  
