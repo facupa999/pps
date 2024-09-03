@@ -8,3 +8,6 @@ docker build -t stlabels .
 
 docker run -p 8501:8501 stlabel
  
+3. desde windows al navegador ir a "http://localhost:8501"
+
+	en linux a "http://0.0.0.0:8501"

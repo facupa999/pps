@@ -8,3 +8,6 @@ docker build -t mallas .
 
 docker run -p 8501:8501 mallas
  
+3. desde windows al navegador ir a "http://localhost:8501"
+
+	en linux a "http://0.0.0.0:8501"
