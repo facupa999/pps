@@ -19,8 +19,6 @@ from Models.LeNet_ELU_SVDD import Encoder
 VALID_STRUCTURES = ["amygdala", "putamen", "pallidum", "hippocampus", "thalamus"]
 
 st.markdown("# Una sola imagen")
-st.sidebar.markdown("# Una sola imagen:")
-st.sidebar.subheader("Aqui podras trabajar de a una imagen")
 
 
 # Directorio donde se guardarán los archivos CSV
@@ -79,12 +77,17 @@ def extract_structure(img_path, structure):
     # Nombre del archivo CSV para la estructura específica
     csv_file_path = os.path.join(CSV_DIRECTORY, f"{structure}_results.csv")
 
+
+    st.write(f"La diferencia entre volúmenes es de: {volume_difference}")
+    asimetry = asimetria(left_output_path,right_output_path,structure)
+
     # Agregar fila al archivo CSV específico
     new_row = {
         "Nombre de Archivo": filename,
         "Volumen Izquierdo": left_volume,
         "Volumen Derecho": right_volume,
-        "Diferencia de Volumen": volume_difference
+        "Diferencia de Volumen": volume_difference,
+        "Asimetria": asimetry
     }
     
     if not os.path.exists(csv_file_path):
@@ -95,11 +98,17 @@ def extract_structure(img_path, structure):
 
     df.to_csv(csv_file_path, index=False)
 
-    st.write(f"La diferencia entre volúmenes es de: {volume_difference}")
-    asimetria(left_output_path,right_output_path,structure)
-
     # Agregar archivos extraídos a la lista de archivos en session_state
     st.session_state.output_files.extend(output_files)
+
+def sonido_de_aviso():
+    sound_script = """
+    <script>
+        var audio = new Audio('https://www.soundjay.com/button/beep-07.wav');  // URL de un sonido
+        audio.play();
+    </script>
+    """
+    st.markdown(sound_script, unsafe_allow_html=True)
 
 
 def segmentar(img_path, name_subject):
@@ -111,6 +120,7 @@ def segmentar(img_path, name_subject):
             command = ["bash", "/fastsurfer/fast_surfer.sh", img_path, "/fastsurfer", name_subject]
             subprocess.run(command, capture_output=True, text=True, check=True)
             st.success("Segmentación completada exitosamente.")
+            sonido_de_aviso()
         except subprocess.CalledProcessError as e:
             st.error(f"Error al ejecutar el script: {e.stderr}")
 
@@ -145,14 +155,14 @@ def tab_1():
             st.error("Por favor, sube un archivo e ingresa el nombre del paciente.")
 
     # Mostrar archivos extraídos
-    st.subheader("Archivos Segmentados")
-    for file_path in st.session_state.output_segmentation_files:
-        with open(file_path, "rb") as file:
-            st.download_button(
-                label=f"Descargar {os.path.basename(file_path)}",
-                data=file,
-                file_name=os.path.basename(file_path)
-            )
+    # st.subheader("Archivos Segmentados")
+    # for file_path in st.session_state.output_segmentation_files:
+    #     with open(file_path, "rb") as file:
+    #         st.download_button(
+    #             label=f"Descargar {os.path.basename(file_path)}",
+    #             data=file,
+    #             file_name=os.path.basename(file_path)
+    #         )
 
 
 def tab_2():
@@ -164,18 +174,21 @@ def tab_2():
 
     # Opciones de archivos generados en `tab_1` y archivo subido manualmente
     file_options = [None] + st.session_state.output_segmentation_files
-    selected_file = st.selectbox("Seleccionar archivo de los que segmentaste", file_options)
+    selected_file = None
+    if st.session_state.output_segmentation_files:
+        selected_file = st.selectbox("Seleccionar archivo de los que segmentaste", file_options)
 
     # Subir archivo
-    uploaded_file2 = st.file_uploader("O subir archivo .mgz directamente", type=["mgz"])
+    uploaded_file2 = st.file_uploader("Subir archivo .mgz ", type=["mgz"])
     img_path2 = None
 
-    if uploaded_file2 is not None:
+
+    if selected_file is not None:
+        img_path2 = selected_file
+    elif uploaded_file2 is not None:
         img_path2 = os.path.join("/fastsurfer", uploaded_file2.name)
         with open(img_path2, "wb") as f:
             f.write(uploaded_file2.getbuffer())
-    elif selected_file is not None:
-        img_path2 = selected_file
 
     structure = st.selectbox("Selecciona una estructura a extraer", VALID_STRUCTURES)
 
@@ -185,15 +198,15 @@ def tab_2():
         else:
             st.error("Por favor, selecciona un archivo segmentado o sube uno manualmente y selecciona una estructura.")
 
-    # Mostrar archivos extraídos
-    st.subheader("Archivos Extraídos")
-    for file_path in st.session_state.output_files:
-        with open(file_path, "rb") as file:
-            st.download_button(
-                label=f"Descargar {os.path.basename(file_path)}",
-                data=file,
-                file_name=os.path.basename(file_path)
-            )
+    # # Mostrar archivos extraídos
+    # st.subheader("Archivos Extraídos")
+    # for file_path in st.session_state.output_files:
+    #     with open(file_path, "rb") as file:
+    #         st.download_button(
+    #             label=f"Descargar {os.path.basename(file_path)}",
+    #             data=file,
+    #             file_name=os.path.basename(file_path)
+    #         )
 
 
 def tab_3():
@@ -321,7 +334,9 @@ def asimetria(image,imagepair,structure):
     ax.axis('off')
 
     # Mostrar el gráfico en streamlit
-    st.pyplot(fig)
+    #st.pyplot(fig)
+    st.pyplot(plt)
+    return NORAH_index
 
 def margin(x,tolerance):
     y = (x*tolerance)
@@ -364,7 +379,6 @@ def preprocess_image_file_for_anomaly_detection(hippocampal_mri: np.array, image
     return new_image
 
 
-
 tab1, tab2, tab3 = st.tabs(["Segmentar Imagen", "Imagen ya Segmentada", "Resultados"])
 with tab1:
     tab_1()
@@ -375,6 +389,31 @@ with tab2:
 with tab3:
     tab_3()
 
+
+if "output_segmentation_files" in st.session_state or "output_files" in st.session_state:
+    st.sidebar.subheader("Archivos de Salida")
+
+with st.sidebar.expander("Segmentaciones"):
+    if "output_segmentation_files" in st.session_state:
+        # Mostrar archivos extraídos
+        for file_path in st.session_state.output_segmentation_files:
+            with open(file_path, "rb") as file:
+                st.download_button(
+                    label=f"Descargar {os.path.basename(file_path)}",
+                    data=file,
+                    file_name=os.path.basename(file_path)
+                )
+
+with st.sidebar.expander("Extracciones"):
+    if "output_files" in st.session_state:
+        # Mostrar archivos extraídos
+        for file_path in st.session_state.output_files:
+            with open(file_path, "rb") as file:
+                st.download_button(
+                    label=f"Descargar {os.path.basename(file_path)}",
+                    data=file,
+                    file_name=os.path.basename(file_path)
+                )
 
 
 
