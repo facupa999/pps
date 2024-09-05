@@ -14,6 +14,19 @@ from matplotlib.colors import LinearSegmentedColormap
 from Models.LeNet_ELU_SVDD import Encoder
 
 
+#para malla
+import trimesh
+from skimage import measure
+from trimesh import Trimesh, smoothing
+from stpyvista import stpyvista
+import pyvista as pv
+
+
+
+
+
+# Inicializar Xvfb para PyVista
+pv.start_xvfb()
 
 # Estructuras válidas
 VALID_STRUCTURES = ["amygdala", "putamen", "pallidum", "hippocampus", "thalamus"]
@@ -79,6 +92,7 @@ def extract_structure(img_path, structure):
 
 
     st.write(f"La diferencia entre volúmenes es de: {volume_difference}")
+    #asimetry, file_npy = asimetria(left_output_path,right_output_path,structure)
     asimetry = asimetria(left_output_path,right_output_path,structure)
 
     # Agregar fila al archivo CSV específico
@@ -90,25 +104,32 @@ def extract_structure(img_path, structure):
         "Asimetria": asimetry
     }
     
+
     if not os.path.exists(csv_file_path):
         df = pd.DataFrame([new_row])
     else:
         df = pd.read_csv(csv_file_path)
-        df = df.append(new_row, ignore_index=True)
+        new_row_df = pd.DataFrame([new_row])  # Convertir la nueva fila en un DataFrame
+        df = pd.concat([df, new_row_df], ignore_index=True)
 
+    # Guardar de nuevo el DataFrame en el archivo CSV
     df.to_csv(csv_file_path, index=False)
+
+
+
 
     # Agregar archivos extraídos a la lista de archivos en session_state
     st.session_state.output_files.extend(output_files)
+    return left_output_path,right_output_path
 
 def sonido_de_aviso():
-    sound_script = """
-    <script>
-        var audio = new Audio('https://www.soundjay.com/button/beep-07.wav');  // URL de un sonido
-        audio.play();
-    </script>
+    sound_html = """
+    <audio autoplay>
+    <source src="https://www.soundjay.com/button/beep-07.wav" type="audio/wav">
+    Tu navegador no soporta el elemento de audio.
+    </audio>
     """
-    st.markdown(sound_script, unsafe_allow_html=True)
+    st.markdown(sound_html, unsafe_allow_html=True)
 
 
 def segmentar(img_path, name_subject):
@@ -132,6 +153,81 @@ def segmentar(img_path, name_subject):
     st.session_state.output_segmentation_files.extend(output_segmentation_files)
 
 
+def visor3D(path_izq,path_der):
+    # Columns for left and right thalamus with increased separation
+    nombre = os.path.basename(path_izq).split('_left')[0]
+    structure = os.path.splitext(os.path.basename(path_izq).split('_left_')[1])[0]
+    with st.expander(f"{structure} de la imagen {nombre}"):
+        cols = st.columns([1, 0.2, 1], gap="medium")
+        # Load left estructure data
+        path_izq = nib.load(path_izq)
+        left_structure_data = path_izq.get_fdata()
+        left_structure_data_flip = np.flip(left_structure_data, axis=0).copy()
+
+        # Extract surface mesh for left structure
+        verts_left, faces_left, normals_left, values_left = measure.marching_cubes(left_structure_data_flip, 0.5)
+        faces_left = faces_left[:, ::-1]
+        mesh_left = trimesh.Trimesh(vertices=verts_left, faces=faces_left)
+        mesh_left = smoothing.filter_laplacian(
+            mesh_left.subdivide_loop(),
+            lamb=0.5,
+            iterations=10,
+            implicit_time_integration=False,
+            volume_constraint=True
+        )
+
+        # Load right structure data
+        right_structure = nib.load(path_der)
+        right_structure_data = right_structure.get_fdata()
+        right_structure_data_flip = np.flip(right_structure_data, axis=0).copy()
+
+        # Extract surface mesh for right structure
+        verts_right, faces_right, normals_right, values_right = measure.marching_cubes(right_structure_data_flip, 0.5)
+        faces_right = faces_right[:, ::-1]
+        mesh_right = trimesh.Trimesh(vertices=verts_right, faces=faces_right)
+        mesh_right = smoothing.filter_laplacian(
+            mesh_right.subdivide_loop(),
+            lamb=0.5,
+            iterations=10,
+            implicit_time_integration=False,
+            volume_constraint=True
+        )
+
+        # Plot left structure
+        with cols[0]:
+            plotter_left = pv.Plotter(window_size=[300, 300])  # Set to square window
+            plotter_left.add_mesh(mesh_left, cmap='bwr', line_width=1, label=f"Left {structure}")
+            plotter_left.add_scalar_bar()
+            plotter_left.view_isometric()
+            plotter_left.add_text(f"Left {structure}", position='upper_left', font_size=12, color='black')  # Add title
+            stpyvista(plotter_left)
+
+        # Add a space between plots for separation
+        with cols[1]:
+            st.write("")  # This column is used to create space between the plots
+
+        # Plot right structure
+        with cols[2]:
+            plotter_right = pv.Plotter(window_size=[300, 300])  # Set to square window
+            plotter_right.add_mesh(mesh_right, cmap='bwr', line_width=1, label=f"Right {structure}")
+            plotter_right.add_scalar_bar()
+            plotter_right.view_isometric()
+            plotter_right.add_text(f"Right {structure}", position='upper_left', font_size=12, color='black')  # Add title
+            stpyvista(plotter_right)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 def tab_1():
     st.title("Segmentación de imagen")
 
@@ -153,16 +249,6 @@ def tab_1():
             segmentar(img_path, name_subject)
         else:
             st.error("Por favor, sube un archivo e ingresa el nombre del paciente.")
-
-    # Mostrar archivos extraídos
-    # st.subheader("Archivos Segmentados")
-    # for file_path in st.session_state.output_segmentation_files:
-    #     with open(file_path, "rb") as file:
-    #         st.download_button(
-    #             label=f"Descargar {os.path.basename(file_path)}",
-    #             data=file,
-    #             file_name=os.path.basename(file_path)
-    #         )
 
 
 def tab_2():
@@ -194,22 +280,29 @@ def tab_2():
 
     if st.button("Extraer"):
         if img_path2:
-            extract_structure(img_path2, structure)
+            path_izq,path_der = extract_structure(img_path2, structure)
+            visor3D(path_izq,path_der)
         else:
             st.error("Por favor, selecciona un archivo segmentado o sube uno manualmente y selecciona una estructura.")
-
-    # # Mostrar archivos extraídos
-    # st.subheader("Archivos Extraídos")
-    # for file_path in st.session_state.output_files:
-    #     with open(file_path, "rb") as file:
-    #         st.download_button(
-    #             label=f"Descargar {os.path.basename(file_path)}",
-    #             data=file,
-    #             file_name=os.path.basename(file_path)
-    #         )
-
-
+        
+    
 def tab_3():
+    if 'output_files' in st.session_state and len(st.session_state.output_files) > 0:
+        # Suponiendo que los paths están en st.session_state.output_files
+        paths = st.session_state.output_files
+        # Recorremos los paths de a 2
+        for i in range(0, len(paths), 2):
+            if i + 1 < len(paths):  # Asegurarse de que exista un par
+                path_izquierdo = paths[i]
+                path_derecho = paths[i + 1]
+                visor3D(path_izquierdo, path_derecho)
+    else:
+        st.write("Aun no hay imagenes para mostrar")
+
+
+
+
+def tab_4():
     st.title("Resultados")
 
     # Iterar sobre cada estructura válida y mostrar el CSV si existe y no está vacío
@@ -295,7 +388,7 @@ def asimetria(image,imagepair,structure):
         
 
     NORAH_index = torch.sum((torch.from_numpy(inference) - c) ** 2, dim=1).numpy()
-    st.write(f"El indice Norah es: {NORAH_index*200000}")
+    st.write(f"El indice Norah es: {NORAH_index}")
 
     # Configuración de la figura
     fig, ax = plt.subplots()
@@ -321,8 +414,8 @@ def asimetria(image,imagepair,structure):
 
     # Coordenadas para el punto negro a 25 unidades en un ángulo de 30 grados
     angle_rad = np.radians(90)
-    point_x = NORAH_index*200000 * np.cos(angle_rad)
-    point_y = NORAH_index*200000 * np.sin(angle_rad)
+    point_x = NORAH_index * np.cos(angle_rad)
+    point_y = NORAH_index * np.sin(angle_rad)
 
     # Dibujar el punto negro
     ax.plot(point_x, point_y, 'd')  # 'ko' indica un punto negro
@@ -336,7 +429,14 @@ def asimetria(image,imagepair,structure):
     # Mostrar el gráfico en streamlit
     #st.pyplot(fig)
     st.pyplot(plt)
-    return NORAH_index
+    
+    print('entrando')
+    #control_right_occluded, infra_array, ultra_array = negative_occlusion(Example_input, 8, 8, c, model)
+    print('occlusion finished')
+    ##############################################
+    #file_npy = control_right_occluded[:][:][:].cpu().detach().numpy()
+    ##############################################
+    return NORAH_index#, file_npy
 
 def margin(x,tolerance):
     y = (x*tolerance)
@@ -378,8 +478,66 @@ def preprocess_image_file_for_anomaly_detection(hippocampal_mri: np.array, image
 
     return new_image
 
+def negative_occlusion(img, patch, stride, c, trainedModel):
+    infra_array, ultra_array = [], []
+    image = img[:][0][0][0]
+    counter_image = img[:][0][0][1]
+    occluded_baseline = torch.zeros(64,64,64)
+    negative_occluded_baseline = torch.zeros(64,64,64)
+    positive_occluded_baseline = torch.zeros(64,64,64)
 
-tab1, tab2, tab3 = st.tabs(["Segmentar Imagen", "Imagen ya Segmentada", "Resultados"])
+    H, W, L = image.shape
+    patch_H, patch_W, patch_L = patch,patch,patch
+    stride=stride
+    mean=0
+
+    anchors = []
+    grid_l = 0
+    while grid_l < L :
+        grid_h = 0
+        while grid_h < H :
+            grid_w = 0
+            while grid_w <= W - patch_W:
+                anchors.append((grid_l, grid_h, grid_w))
+                grid_w += stride  
+            grid_h += stride
+        grid_l += stride
+    
+    result = trainedModel.predict(img).cpu().detach().numpy()
+    infra_array.append(c.reshape(1,32)) #center is saved in the list
+    infra_array.append(result) #Original distance is also saved in the list
+    original_distance = torch.sum((torch.from_numpy(result) - c) ** 2, dim=1).numpy()
+    
+        
+    for i in anchors:
+        grid_l, grid_h, grid_w = i[0],i[1],i[2]
+        images_ = image.clone()
+        counter_images_ = counter_image.clone()
+
+        images_[..., grid_l : grid_l + patch_L, grid_h : grid_h + patch_H, grid_w : grid_w + patch_W] = mean
+        counter_images_[..., grid_l : grid_l + patch_L, grid_h : grid_h + patch_H, grid_w : grid_w + patch_W] = mean
+
+        x=torch.unsqueeze(torch.vstack((torch.unsqueeze(images_,dim=0),torch.unsqueeze(counter_images_,dim=0))),dim=0)
+
+        control_right = [x,img[:][1],img[:][2]]
+        result = trainedModel.predict(control_right).cpu().detach().numpy()
+
+        new_distance = torch.sum((torch.from_numpy(result) - c) ** 2, dim=1).numpy()
+        A = original_distance - new_distance
+        occluded_baseline[..., grid_l : grid_l + patch_L, grid_h : grid_h + patch_H, grid_w : grid_w + patch_W] += A
+        
+        if A > 0:
+            negative_occluded_baseline[..., grid_l : grid_l + patch_L, grid_h : grid_h + patch_H, grid_w : grid_w + patch_W] += A
+        if A < 0:
+            positive_occluded_baseline[..., grid_l : grid_l + patch_L, grid_h : grid_h + patch_H, grid_w : grid_w + patch_W] += A
+
+    negative_occluded_baseline = occluded_baseline
+    negative_occluded_baseline[negative_occluded_baseline < 0] = 0
+    print('end of the road')
+    return occluded_baseline, negative_occluded_baseline, positive_occluded_baseline
+
+
+tab1, tab2, tab3, tab4 = st.tabs(["Segmentar Imagen", "Imagen ya Segmentada","imagenes" ,"Resultados"])
 with tab1:
     tab_1()
 
@@ -388,6 +546,9 @@ with tab2:
 
 with tab3:
     tab_3()
+
+with tab4:
+    tab_4()
 
 
 if "output_segmentation_files" in st.session_state or "output_files" in st.session_state:
