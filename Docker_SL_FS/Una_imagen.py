@@ -20,6 +20,9 @@ from skimage import measure
 from trimesh import Trimesh, smoothing
 from stpyvista import stpyvista
 import pyvista as pv
+from scipy.ndimage import gaussian_filter
+from scipy.ndimage import map_coordinates
+import matplotlib.colors as mcolors
 
 
 
@@ -92,8 +95,8 @@ def extract_structure(img_path, structure):
 
 
     st.write(f"La diferencia entre volúmenes es de: {volume_difference}")
-    #asimetry, file_npy = asimetria(left_output_path,right_output_path,structure)
-    asimetry = asimetria(left_output_path,right_output_path,structure)
+    asimetry, file_npy = asimetria(left_output_path,right_output_path,structure)
+    #asimetry = asimetria(left_output_path,right_output_path,structure)
 
     # Agregar fila al archivo CSV específico
     new_row = {
@@ -120,7 +123,8 @@ def extract_structure(img_path, structure):
 
     # Agregar archivos extraídos a la lista de archivos en session_state
     st.session_state.output_files.extend(output_files)
-    return left_output_path,right_output_path
+    #return left_output_path,right_output_path
+    return left_output_path,right_output_path,file_npy,asimetry
 
 def sonido_de_aviso():
     sound_html = """
@@ -155,73 +159,127 @@ def segmentar(img_path, name_subject):
 
 def visor3D(path_izq,path_der):
     # Columns for left and right thalamus with increased separation
-    nombre = os.path.basename(path_izq).split('_left')[0]
     structure = os.path.splitext(os.path.basename(path_izq).split('_left_')[1])[0]
-    with st.expander(f"{structure} de la imagen {nombre}"):
-        cols = st.columns([1, 0.2, 1], gap="medium")
-        # Load left estructure data
-        path_izq = nib.load(path_izq)
-        left_structure_data = path_izq.get_fdata()
-        left_structure_data_flip = np.flip(left_structure_data, axis=0).copy()
+    cols = st.columns([1, 0.2, 1], gap="medium")
+    # Load left estructure data
+    path_izq = nib.load(path_izq)
+    left_structure_data = path_izq.get_fdata()
+    left_structure_data_flip = np.flip(left_structure_data, axis=0).copy()
 
-        # Extract surface mesh for left structure
-        verts_left, faces_left, normals_left, values_left = measure.marching_cubes(left_structure_data_flip, 0.5)
-        faces_left = faces_left[:, ::-1]
-        mesh_left = trimesh.Trimesh(vertices=verts_left, faces=faces_left)
-        mesh_left = smoothing.filter_laplacian(
-            mesh_left.subdivide_loop(),
-            lamb=0.5,
-            iterations=10,
-            implicit_time_integration=False,
-            volume_constraint=True
-        )
+    # Extract surface mesh for left structure
+    verts_left, faces_left, normals_left, values_left = measure.marching_cubes(left_structure_data_flip, 0.5)
+    faces_left = faces_left[:, ::-1]
+    mesh_left = trimesh.Trimesh(vertices=verts_left, faces=faces_left)
+    mesh_left = smoothing.filter_laplacian(
+        mesh_left.subdivide_loop(),
+        lamb=0.5,
+        iterations=10,
+        implicit_time_integration=False,
+        volume_constraint=True
+    )
 
-        # Load right structure data
-        right_structure = nib.load(path_der)
-        right_structure_data = right_structure.get_fdata()
-        right_structure_data_flip = np.flip(right_structure_data, axis=0).copy()
+    # Load right structure data
+    right_structure = nib.load(path_der)
+    right_structure_data = right_structure.get_fdata()
+    right_structure_data_flip = np.flip(right_structure_data, axis=0).copy()
 
-        # Extract surface mesh for right structure
-        verts_right, faces_right, normals_right, values_right = measure.marching_cubes(right_structure_data_flip, 0.5)
-        faces_right = faces_right[:, ::-1]
-        mesh_right = trimesh.Trimesh(vertices=verts_right, faces=faces_right)
-        mesh_right = smoothing.filter_laplacian(
-            mesh_right.subdivide_loop(),
-            lamb=0.5,
-            iterations=10,
-            implicit_time_integration=False,
-            volume_constraint=True
-        )
+    # Extract surface mesh for right structure
+    verts_right, faces_right, normals_right, values_right = measure.marching_cubes(right_structure_data_flip, 0.5)
+    faces_right = faces_right[:, ::-1]
+    mesh_right = trimesh.Trimesh(vertices=verts_right, faces=faces_right)
+    mesh_right = smoothing.filter_laplacian(
+        mesh_right.subdivide_loop(),
+        lamb=0.5,
+        iterations=10,
+        implicit_time_integration=False,
+        volume_constraint=True
+    )
 
-        # Plot left structure
-        with cols[0]:
-            plotter_left = pv.Plotter(window_size=[300, 300])  # Set to square window
-            plotter_left.add_mesh(mesh_left, cmap='bwr', line_width=1, label=f"Left {structure}")
-            plotter_left.add_scalar_bar()
-            plotter_left.view_isometric()
-            plotter_left.add_text(f"Left {structure}", position='upper_left', font_size=12, color='black')  # Add title
-            stpyvista(plotter_left)
+    # Plot left structure
+    with cols[0]:
+        plotter_left = pv.Plotter(window_size=[300, 300])  # Set to square window
+        plotter_left.add_mesh(mesh_left, cmap='bwr', line_width=1, label=f"Left {structure}")
+        plotter_left.add_scalar_bar()
+        plotter_left.view_isometric()
+        plotter_left.add_text(f"Left {structure}", position='upper_left', font_size=12, color='black')  # Add title
+        stpyvista(plotter_left)
 
-        # Add a space between plots for separation
-        with cols[1]:
-            st.write("")  # This column is used to create space between the plots
+    # Add a space between plots for separation
+    with cols[1]:
+        st.write("")  # This column is used to create space between the plots
 
-        # Plot right structure
-        with cols[2]:
-            plotter_right = pv.Plotter(window_size=[300, 300])  # Set to square window
-            plotter_right.add_mesh(mesh_right, cmap='bwr', line_width=1, label=f"Right {structure}")
-            plotter_right.add_scalar_bar()
-            plotter_right.view_isometric()
-            plotter_right.add_text(f"Right {structure}", position='upper_left', font_size=12, color='black')  # Add title
-            stpyvista(plotter_right)
-
+    # Plot right structure
+    with cols[2]:
+        plotter_right = pv.Plotter(window_size=[300, 300])  # Set to square window
+        plotter_right.add_mesh(mesh_right, cmap='bwr', line_width=1, label=f"Right {structure}")
+        plotter_right.add_scalar_bar()
+        plotter_right.view_isometric()
+        plotter_right.add_text(f"Right {structure}", position='upper_left', font_size=12, color='black')  # Add title
+        stpyvista(plotter_right)
 
 
+def malla(path_izq,file_npy):
+    st.header("malla")
+    brain_vol = nib.load(path_izq)
+    # Check the type of the brain volume object
+    print(type(brain_vol))
 
 
+    # Extract data from the brain volume object
+    brain_vol_data = brain_vol.get_fdata()
+    brain_vol_data_flip = np.flip(brain_vol_data,axis=0).copy()
+    print(type(brain_vol_data))
+    print(brain_vol_data.shape)
 
 
+    # Apply the marching cubes algorithm to extract surface mesh
+    verts, faces, normals, values = measure.marching_cubes(brain_vol_data_flip, 0.5)
 
+    # Orient faces
+    faces = faces[:, ::-1]
+
+
+    # Load the mesh
+    mesh = trimesh.Trimesh(vertices=verts, faces=faces)
+
+    # Apply Loop subdivision
+    subdivided_mesh = mesh.subdivide_loop()
+    # Apply Laplacian smoothing
+    smoothed_mesh = trimesh.smoothing.filter_laplacian(subdivided_mesh, lamb=0.5, iterations=10, implicit_time_integration=False, volume_constraint=True, laplacian_operator=None)
+    scalar_field = file_npy
+
+    # Apply Gaussian smoothing
+    sigma = 1  # Standard deviation of the Gaussian kernel, adjust as needed
+    smoothed_scalar_field = gaussian_filter(scalar_field, sigma)
+
+    # Map scalar values from the field onto the mesh vertices
+    vertex_coords = smoothed_mesh.vertices - 0.5
+    scalar_values_at_vertices = map_coordinates(smoothed_scalar_field, vertex_coords.T, order=1, mode='nearest')
+
+    # Calculate average scalar value per face of the mesh
+    average_scalar_per_face = scalar_values_at_vertices[smoothed_mesh.faces.astype("int")].mean(axis=1)
+    # Convert the mesh to PyVista format
+    pv_mesh = pv.PolyData(smoothed_mesh.vertices, np.hstack((np.full((smoothed_mesh.faces.shape[0], 1), 3), smoothed_mesh.faces)).astype('int'))
+
+    # Add scalar data to PyVista mesh
+    pv_mesh["average_scalar"] = average_scalar_per_face
+
+    # Normalize and map the scalar values to colors for visualization
+    norm = mcolors.Normalize(vmin=average_scalar_per_face.min(), vmax=average_scalar_per_face.max())
+    colormap = plt.cm.plasma
+    colors = colormap(norm(average_scalar_per_face))
+
+    # Initialize a PyVista plotter
+    plotter = pv.Plotter(window_size=[600, 600])
+    plotter.add_mesh(pv_mesh, scalars='average_scalar', cmap='plasma', show_edges=True)
+
+    # Final touches
+    plotter.view_isometric()
+    plotter.add_scalar_bar()
+    plotter.background_color = 'white'
+
+    # Display the PyVista plot using stpyvista
+    stpyvista(plotter)
 
 
 
@@ -257,6 +315,8 @@ def tab_2():
     # Inicializar la lista de archivos extraídos en session_state si no existe
     if "output_files" not in st.session_state:
         st.session_state.output_files = []
+    if 'mapa' not in st.session_state:
+        st.session_state.mapa = {}
 
     # Opciones de archivos generados en `tab_1` y archivo subido manualmente
     file_options = [None] + st.session_state.output_segmentation_files
@@ -280,8 +340,13 @@ def tab_2():
 
     if st.button("Extraer"):
         if img_path2:
-            path_izq,path_der = extract_structure(img_path2, structure)
-            visor3D(path_izq,path_der)
+            path_izq,path_der,file_npy= extract_structure(img_path2, structure)
+            nombre = os.path.basename(path_izq).split('_left')[0]
+            structure = os.path.splitext(os.path.basename(path_izq).split('_left_')[1])[0]
+            with st.expander(f"{structure} de la imagen {nombre}"):
+                visor3D(path_izq,path_der)
+                malla(path_izq,file_npy)
+            st.session_state.mapa[path_izq] = file_npy
         else:
             st.error("Por favor, selecciona un archivo segmentado o sube uno manualmente y selecciona una estructura.")
         
@@ -295,7 +360,11 @@ def tab_3():
             if i + 1 < len(paths):  # Asegurarse de que exista un par
                 path_izquierdo = paths[i]
                 path_derecho = paths[i + 1]
-                visor3D(path_izquierdo, path_derecho)
+                nombre = os.path.basename(path_izquierdo).split('_left')[0]
+                structure = os.path.splitext(os.path.basename(path_izquierdo).split('_left_')[1])[0]
+                with st.expander(f"{structure} de la imagen {nombre}"):
+                    visor3D(path_izquierdo, path_derecho)
+                    malla(path_izquierdo,st.session_state.mapa[path_izquierdo])
     else:
         st.write("Aun no hay imagenes para mostrar")
 
@@ -431,12 +500,12 @@ def asimetria(image,imagepair,structure):
     st.pyplot(plt)
     
     print('entrando')
-    #control_right_occluded, infra_array, ultra_array = negative_occlusion(Example_input, 8, 8, c, model)
+    control_right_occluded, infra_array, ultra_array = negative_occlusion(Example_input, 8, 8, c, model)
     print('occlusion finished')
     ##############################################
-    #file_npy = control_right_occluded[:][:][:].cpu().detach().numpy()
+    file_npy = control_right_occluded[:][:][:].cpu().detach().numpy()
     ##############################################
-    return NORAH_index#, file_npy
+    return NORAH_index, file_npy
 
 def margin(x,tolerance):
     y = (x*tolerance)
