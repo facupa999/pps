@@ -124,7 +124,7 @@ def extract_structure(img_path, structure):
     # Agregar archivos extraídos a la lista de archivos en session_state
     st.session_state.output_files.extend(output_files)
     #return left_output_path,right_output_path
-    return left_output_path,right_output_path,file_npy,asimetry
+    return left_output_path,right_output_path,file_npy
 
 def sonido_de_aviso():
     sound_html = """
