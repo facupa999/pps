@@ -44,10 +44,6 @@ CSV_DIRECTORY = "/fastsurfer/csv_results"
 os.makedirs(CSV_DIRECTORY, exist_ok=True)
 
 def extract_structure(img_path, structure):
-    if structure not in VALID_STRUCTURES:
-        st.error(f"Estructura {structure} no es válida. Las estructuras válidas son: {', '.join(VALID_STRUCTURES)}.")
-        return
-
     # Cargar imagen
     img = nib.load(img_path)
     data = img.get_fdata()
@@ -95,8 +91,7 @@ def extract_structure(img_path, structure):
 
 
     st.write(f"La diferencia entre volúmenes es de: {volume_difference}")
-    asimetry, file_npy = asimetria(left_output_path,right_output_path,structure)
-    #asimetry = asimetria(left_output_path,right_output_path,structure)
+    asimetry = asimetria(left_output_path,right_output_path,structure)
 
     # Agregar fila al archivo CSV específico
     new_row = {
@@ -108,32 +103,31 @@ def extract_structure(img_path, structure):
     }
     
 
-    if not os.path.exists(csv_file_path):
-        df = pd.DataFrame([new_row])
-    else:
-        df = pd.read_csv(csv_file_path)
-        new_row_df = pd.DataFrame([new_row])  # Convertir la nueva fila en un DataFrame
-        df = pd.concat([df, new_row_df], ignore_index=True)
 
-    # Guardar de nuevo el DataFrame en el archivo CSV
-    df.to_csv(csv_file_path, index=False)
+    archivos_reemplazados = []
 
+    # Comprobar si algún archivo ya existe
+    for nuevo_archivo in output_files:
+        for archivo_existente in st.session_state.output_files:
+            if os.path.basename(nuevo_archivo) == os.path.basename(archivo_existente):
+                # El archivo ya existe, se elimina del sistema y de session_state
+                st.session_state.output_files.remove(archivo_existente)  # Elimina el archivo de session_state
+                archivos_reemplazados.append(nuevo_archivo)  # Añadir a la lista de reemplazados
 
-
+    if not archivos_reemplazados:
+        if not os.path.exists(csv_file_path):
+            df = pd.DataFrame([new_row])
+        else:
+            df = pd.read_csv(csv_file_path)
+            new_row_df = pd.DataFrame([new_row])  # Convertir la nueva fila en un DataFrame
+            df = pd.concat([df, new_row_df], ignore_index=True)
+        # Guardar de nuevo el DataFrame en el archivo CSV
+        df.to_csv(csv_file_path, index=False)
 
     # Agregar archivos extraídos a la lista de archivos en session_state
     st.session_state.output_files.extend(output_files)
-    #return left_output_path,right_output_path
-    return left_output_path,right_output_path,file_npy
+    return left_output_path,right_output_path
 
-def sonido_de_aviso():
-    sound_html = """
-    <audio autoplay>
-    <source src="https://www.soundjay.com/button/beep-07.wav" type="audio/wav">
-    Tu navegador no soporta el elemento de audio.
-    </audio>
-    """
-    st.markdown(sound_html, unsafe_allow_html=True)
 
 
 def segmentar(img_path, name_subject):
@@ -145,7 +139,6 @@ def segmentar(img_path, name_subject):
             command = ["bash", "/fastsurfer/fast_surfer.sh", img_path, "/fastsurfer", name_subject]
             subprocess.run(command, capture_output=True, text=True, check=True)
             st.success("Segmentación completada exitosamente.")
-            sonido_de_aviso()
         except subprocess.CalledProcessError as e:
             st.error(f"Error al ejecutar el script: {e.stderr}")
 
@@ -294,19 +287,27 @@ def tab_1():
         st.session_state.output_segmentation_files = []
 
     # Subir archivo
-    uploaded_file = st.file_uploader("Subir archivo .nii", type=["nii"])
-    if uploaded_file is not None:
-        img_path = os.path.join("/fastsurfer", uploaded_file.name)
-        with open(img_path, "wb") as f:
-            f.write(uploaded_file.getbuffer())
 
-    name_subject = st.text_input("Ingrese el nombre del paciente")
+    with st.form("form_segmentar"):
+        # Subir archivo
+        uploaded_file = st.file_uploader("Subir archivo .nii", type=["nii"])
+        if uploaded_file is not None:
+            img_path = os.path.join("/fastsurfer", uploaded_file.name)
+            with open(img_path, "wb") as f:
+                f.write(uploaded_file.getbuffer())
 
-    if st.button("Segmentar"):
-        if uploaded_file and name_subject:
-            segmentar(img_path, name_subject)
-        else:
-            st.error("Por favor, sube un archivo e ingresa el nombre del paciente.")
+        name_subject = st.text_input("Ingrese el nombre del paciente")
+
+        boton_segmentar = st.form_submit_button('Segmentar')
+
+        if boton_segmentar:
+            if uploaded_file and name_subject:
+                if os.path.exists(f"/fastsurfer/{name_subject}.mgz"):
+                    st.warning(f"El archivo {name_subject}.mgz ya existe.")
+                else:
+                    segmentar(img_path, name_subject)
+            else:
+                st.error("Por favor, sube un archivo e ingresa el nombre del paciente.")
 
 
 def tab_2():
@@ -318,38 +319,81 @@ def tab_2():
     if 'mapa' not in st.session_state:
         st.session_state.mapa = {}
 
+    # Inicializar las variables para almacenar los paths si no existen en session_state
+    if 'path_izq' not in st.session_state:
+        st.session_state.path_izq = None
+    if 'path_der' not in st.session_state:
+        st.session_state.path_der = None
+    if 'extraido' not in st.session_state:
+        st.session_state.extraido = False  # Flag para controlar si se ha extraído
+    if 'malla_vista' not in st.session_state:
+        st.session_state.malla_vista = False  # Flag para controlar si se vio la malla
+
     # Opciones de archivos generados en `tab_1` y archivo subido manualmente
-    file_options = [None] + st.session_state.output_segmentation_files
-    selected_file = None
-    if st.session_state.output_segmentation_files:
-        selected_file = st.selectbox("Seleccionar archivo de los que segmentaste", file_options)
+    with st.form("form_extraer"):
+        file_options = [None] + st.session_state.output_segmentation_files
+        selected_file = None
+        if st.session_state.output_segmentation_files:
+            selected_file = st.selectbox("Seleccionar archivo de los que segmentaste", file_options)
 
-    # Subir archivo
-    uploaded_file2 = st.file_uploader("Subir archivo .mgz ", type=["mgz"])
-    img_path2 = None
+        # Subir archivo
+        uploaded_file2 = st.file_uploader("Subir archivo .mgz", type=["mgz"])
+        img_path2 = None
 
+        if selected_file is not None:
+            img_path2 = selected_file
+        elif uploaded_file2 is not None:
+            img_path2 = os.path.join("/fastsurfer", uploaded_file2.name)
+            with open(img_path2, "wb") as f:
+                f.write(uploaded_file2.getbuffer())
 
-    if selected_file is not None:
-        img_path2 = selected_file
-    elif uploaded_file2 is not None:
-        img_path2 = os.path.join("/fastsurfer", uploaded_file2.name)
-        with open(img_path2, "wb") as f:
-            f.write(uploaded_file2.getbuffer())
+        structure = st.selectbox("Selecciona una estructura a extraer", VALID_STRUCTURES)
+        extraer = st.form_submit_button('Extraer')
 
-    structure = st.selectbox("Selecciona una estructura a extraer", VALID_STRUCTURES)
-
-    if st.button("Extraer"):
+    if extraer:
         if img_path2:
-            path_izq,path_der,file_npy= extract_structure(img_path2, structure)
+            # Extraer las estructuras y guardar los paths en session_state
+            path_izq, path_der = extract_structure(img_path2, structure)
+            st.session_state.path_izq = path_izq
+            st.session_state.path_der = path_der
             nombre = os.path.basename(path_izq).split('_left')[0]
             structure = os.path.splitext(os.path.basename(path_izq).split('_left_')[1])[0]
+            st.session_state.structure = structure
+            st.session_state.extraido = True
+            st.session_state.malla_vista = False
             with st.expander(f"{structure} de la imagen {nombre}"):
-                visor3D(path_izq,path_der)
-                malla(path_izq,file_npy)
-            st.session_state.mapa[path_izq] = file_npy
+                visor3D(path_izq, path_der)
+
+            # Establecer la bandera de extracción en True y resetear la de malla
+             
         else:
             st.error("Por favor, selecciona un archivo segmentado o sube uno manualmente y selecciona una estructura.")
-        
+    
+    # Mostrar el botón "Ver malla" solo si ya se realizó la extracción y aún no se visualizó la malla
+    if st.session_state.extraido and st.session_state.malla_vista==False:
+        if st.button("Ver malla"):
+            # Usar los paths almacenados en session_state
+            if st.session_state.path_izq is not None and st.session_state.path_der is not None:
+                nombre = os.path.basename(st.session_state.path_izq).split('_left')[0]
+                structure = os.path.splitext(os.path.basename(st.session_state.path_izq).split('_left_')[1])[0]
+                with st.spinner('Creando la malla de la imagen, por favor espera...'):
+                    file_npy = generar_npy(st.session_state.path_izq, st.session_state.path_der,st.session_state.structure)
+                with st.expander(f"{structure} de la imagen {nombre}"):
+                    visor3D(st.session_state.path_izq, st.session_state.path_der)
+                    malla(st.session_state.path_izq, file_npy)
+                st.session_state.malla_vista = True
+                st.session_state.mapa[st.session_state.path_izq] = file_npy
+                st.session_state.path_izq = None
+                st.session_state.path_der = None
+    
+            else:
+                st.error("ya se hizo la malla de esta imagen")
+
+
+
+
+
+
     
 def tab_3():
     if 'output_files' in st.session_state and len(st.session_state.output_files) > 0:
@@ -364,7 +408,8 @@ def tab_3():
                 structure = os.path.splitext(os.path.basename(path_izquierdo).split('_left_')[1])[0]
                 with st.expander(f"{structure} de la imagen {nombre}"):
                     visor3D(path_izquierdo, path_derecho)
-                    malla(path_izquierdo,st.session_state.mapa[path_izquierdo])
+                    if path_izquierdo in st.session_state.mapa:
+                        malla(path_izquierdo, st.session_state.mapa[path_izquierdo])
     else:
         st.write("Aun no hay imagenes para mostrar")
 
@@ -393,6 +438,34 @@ def tab_4():
 
 
 def asimetria(image,imagepair,structure):
+    NORAH_index,c,model,Example_input = norah(image,imagepair,structure)
+    st.write(f"El indice Norah es: {NORAH_index}")
+    grafico_norah(NORAH_index)
+    #print('entrando')
+    #control_right_occluded, infra_array, ultra_array = negative_occlusion(Example_input, 8, 8, c, model)
+    #print('occlusion finished')
+    ##############################################
+    #file_npy = control_right_occluded[:][:][:].cpu().detach().numpy()
+    ##############################################
+    return NORAH_index #, file_npy
+
+def generar_npy(image,imagepair,structure):
+    file_npy = occlusion(image,imagepair,structure)
+    return file_npy
+
+
+def occlusion(image,imagepair,structure):
+    NORAH_index,c,model,Example_input = norah(image,imagepair,structure)
+    print('entrando')
+    control_right_occluded, infra_array, ultra_array = negative_occlusion(Example_input, 8, 8, c, model)
+    print('occlusion finished')
+    ##############################################
+    file_npy = control_right_occluded[:][:][:].cpu().detach().numpy()
+    ##############################################
+    return file_npy
+
+
+def norah(image,imagepair,structure):
     image = nib.load(image)
     image = np.array(image.get_fdata())
 
@@ -454,11 +527,11 @@ def asimetria(image,imagepair,structure):
                 -9.3122e-04, -1.1257e-03, -1.0345e-03,  1.4835e-03,  1.4995e-03,
                 1.2943e-03, -9.0330e-04,  1.8791e-03,  6.6228e-04, -2.2420e-04,
                 3.5120e-03,  3.4326e-03]))
-        
-
     NORAH_index = torch.sum((torch.from_numpy(inference) - c) ** 2, dim=1).numpy()
-    st.write(f"El indice Norah es: {NORAH_index}")
+    return  NORAH_index,c,model,Example_input
 
+
+def grafico_norah(NORAH_index):
     # Configuración de la figura
     fig, ax = plt.subplots()
 
@@ -498,14 +571,6 @@ def asimetria(image,imagepair,structure):
     # Mostrar el gráfico en streamlit
     #st.pyplot(fig)
     st.pyplot(plt)
-    
-    print('entrando')
-    control_right_occluded, infra_array, ultra_array = negative_occlusion(Example_input, 8, 8, c, model)
-    print('occlusion finished')
-    ##############################################
-    file_npy = control_right_occluded[:][:][:].cpu().detach().numpy()
-    ##############################################
-    return NORAH_index, file_npy
 
 def margin(x,tolerance):
     y = (x*tolerance)
