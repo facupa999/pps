@@ -25,6 +25,7 @@ from scipy.ndimage import map_coordinates
 import matplotlib.colors as mcolors
 
 import requests
+from streamlit_autorefresh import st_autorefresh  # Asegúrate de instalar esta biblioteca
 
 
 
@@ -36,6 +37,8 @@ VALID_STRUCTURES = ["amygdala", "putamen", "pallidum", "hippocampus", "thalamus"
 
 st.markdown("# Una sola imagen")
 
+if 'proceso_en_curso' not in st.session_state:
+    st.session_state['proceso_en_curso'] = False
 
 # Directorio donde se guardarán los archivos CSV
 CSV_DIRECTORY = "/app/csv_results"
@@ -131,31 +134,41 @@ def extract_structure(img_path, structure):
 
 
 def segmentar(img_path, name_subject):
-    output_segmentation_files = []
-    # Mostrar spinner mientras se ejecuta el script
-    with st.spinner('Segmentando la imagen, por favor espera...'):
-        try:
-            # Ruta de destino en el volumen compartido
-            shared_img_path = os.path.join("/shared", os.path.basename(img_path))
-            
-            # Mover la imagen al volumen compartido
-            shutil.move(img_path, shared_img_path)
+    # Ruta de destino en el volumen compartido
+    shared_img_path = os.path.join("/shared", os.path.basename(img_path))
+    
+    # Mover la imagen al volumen compartido
+    shutil.move(img_path, shared_img_path)
 
-            # Hacer una solicitud HTTP al contenedor de segmentación
-            response = requests.post("http://segmentacion_service:5000/segmentar", json={
-                "img_path": shared_img_path,  # Usar la nueva ruta en el volumen compartido
-                "name_subject": name_subject  # Identificador del sujeto
-            })
+    # Hacer una solicitud HTTP al contenedor de segmentación
+    response = requests.post("http://segmentacion_service:5000/segmentar", json={
+        "img_path": shared_img_path,  # Usar la nueva ruta en el volumen compartido
+        "name_subject": name_subject  # Identificador del sujeto
+    })
 
-            if response.status_code == 200:
-                st.success("Segmentación completada exitosamente.")
-                final_path = os.path.join("/shared", f"{name_subject}.mgz")
-                output_segmentation_files.append(final_path)
-                st.session_state.output_segmentation_files.extend(output_segmentation_files)
-            else:
-                st.error(f"Error al ejecutar el script: {response.json().get('error')}")
-        except Exception as e:
-            st.error(f"Error al mover la imagen o hacer la solicitud al contenedor de segmentación: {e}")
+    if response.status_code == 200:
+        st.session_state['proceso_en_curso'] = True
+        st.success("Segmentación iniciada exitosamente.")
+    else:
+        st.error(f"Error al iniciar la segmentación: {response.json().get('error')}")
+
+# Función para verificar si la segmentación ha terminado
+def verificar_segmentacion(name_subject):
+    # Ruta del archivo final
+    final_path = os.path.join("/shared", f"{name_subject}.mgz")
+    
+    # Verificar si el archivo existe en el volumen compartido
+    if os.path.exists(final_path):
+        st.success(f"Segmentación completada. Archivo disponible en {final_path}.")
+        st.session_state['proceso_en_curso'] = False
+        # Guardar el archivo de salida en el estado de sesión
+        if 'output_segmentation_files' not in st.session_state:
+            st.session_state['output_segmentation_files'] = []
+        st.session_state['output_segmentation_files'].append(final_path)
+    else:
+        st.info("La segmentación aún está en curso. Por favor, vuelve a comprobar más tarde.")
+
+
 
 
 def visor3D(path_izq,path_der):
@@ -313,9 +326,18 @@ def tab_1():
                 if os.path.exists(f"/shared/{name_subject}.mgz"):
                     st.warning(f"El archivo {name_subject}.mgz ya existe.")
                 else:
+                    st.session_state['name_subject'] = name_subject
                     segmentar(img_path, name_subject)
             else:
                 st.error("Por favor, sube un archivo e ingresa el nombre del paciente.")
+
+    # Configurar auto-refresh cada 30 segundos
+    if st.session_state['proceso_en_curso']:
+        verificar_segmentacion(st.session_state['name_subject'])
+
+    # Configurar auto-refresh cada 30 segundos
+    if st.session_state['proceso_en_curso']:
+        st_autorefresh(interval=30 * 1000, key="auto_refresh")  # Configura el refresco cada 30 segundos
 
 
 def tab_2():

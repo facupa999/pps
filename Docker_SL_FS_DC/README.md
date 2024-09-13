@@ -1,12 +1,8 @@
 Modo de uso:
- 
-1. Construir la imagen Docker:
 
-docker build -t stlabels .
+1. se corre en el puerto 8501:
 
-2. correrlo en el puerto 8501:
-
-docker run -p 8501:8501 stlabel
+docker-compose up --build
  
 3. desde windows al navegador ir a "http://localhost:8501"
 

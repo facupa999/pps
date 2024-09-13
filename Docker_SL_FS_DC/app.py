@@ -1,8 +1,18 @@
 from flask import Flask, request, jsonify
 import subprocess
 import os
+import threading
 
 app = Flask(__name__)
+
+def ejecutar_segmentacion(img_path, output_dir, name_subject):
+    try:
+        # Ejecuta el script de segmentación con los parámetros adecuados
+        command = ["/app/run_pipeline.sh", img_path, output_dir, name_subject]
+        subprocess.run(command, check=True)
+
+    except subprocess.CalledProcessError as e:
+        print(f"Error en la segmentación: {str(e)}") 
 
 @app.route('/segmentar', methods=['POST'])
 def segmentar():
@@ -14,20 +24,13 @@ def segmentar():
         return jsonify({"error": "Missing img_path or name_subject"}), 400
 
     try:
-        # Ejecuta el script de segmentación con los parámetros adecuados
-        command = ["/app/run_pipeline.sh", img_path, output_dir, name_subject]
-        subprocess.run(command, check=True)
+        # Iniciar el proceso de segmentación en un hilo separado
+        threading.Thread(target=ejecutar_segmentacion, args=(img_path, output_dir, name_subject)).start()
 
-        # Definir la ruta final del archivo de salida
-        final_path = os.path.join(output_dir, f"{name_subject}.mgz")
-        
-        # Verifica que el archivo se haya generado
-        if os.path.exists(final_path):
-            return jsonify({"message": "Segmentación completada exitosamente.", "output_path": final_path}), 200
-        else:
-            return jsonify({"error": "Error: El archivo de salida no se generó correctamente."}), 500
+        # Responder inmediatamente que la segmentación ha sido iniciada
+        return jsonify({"message": "Segmentación iniciada exitosamente."}), 200
 
-    except subprocess.CalledProcessError as e:
+    except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':

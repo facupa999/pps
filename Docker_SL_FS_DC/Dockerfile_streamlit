@@ -19,6 +19,8 @@ RUN pip install pyvista
 RUN pip install scipy
 RUN pip install matplotlib
 
+RUN pip install streamlit_autorefresh
+
 # Instala dependencias de sistema
 RUN apt-get install -y libgl1-mesa-glx 
 RUN apt-get install -y libglib2.0-0 
