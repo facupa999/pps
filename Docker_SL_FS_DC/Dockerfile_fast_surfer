@@ -1,0 +1,29 @@
+# Imagen de FastSurfer como base
+FROM deepmi/fastsurfer:cpu-latest
+
+WORKDIR /fastsurfer
+
+# Copia el archivo de licencia al contenedor
+COPY fs_license/license.txt /fastsurfer/fs_license/license.txt
+
+# Cambiar a usuario root temporalmente para instalar dependencias
+USER root
+
+# Instala Flask para crear un servidor HTTP
+RUN apt-get update && apt-get install -y python3-pip && pip3 install flask
+
+# Verificar que Python está instalado
+RUN echo "Python Path:" $(which python3) && python3 --version
+
+# Copia el script de ejecución al contenedor
+COPY run_pipeline.sh /app/run_pipeline.sh
+
+# Copia el script del servidor Flask
+COPY app.py /app/app.py
+
+# Exponer el puerto para el servicio HTTP
+EXPOSE 5000
+
+# Comando para iniciar el servidor HTTP usando bash
+ENTRYPOINT ["python3", "/app/app.py"]
+
