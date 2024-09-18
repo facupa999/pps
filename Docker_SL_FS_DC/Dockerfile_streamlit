@@ -1,5 +1,4 @@
-# Imagen de FastSurfer como base
-FROM deepmi/fastsurfer:cpu-latest
+FROM python:3.9-slim
 
 # Establecer el directorio de trabajo en /fastsurfer
 WORKDIR /app

@@ -25,7 +25,8 @@ from scipy.ndimage import map_coordinates
 import matplotlib.colors as mcolors
 
 import requests
-from streamlit_autorefresh import st_autorefresh  # Asegúrate de instalar esta biblioteca
+from streamlit_autorefresh import st_autorefresh  
+from datetime import datetime
 
 
 
@@ -39,6 +40,11 @@ st.markdown("# Una sola imagen")
 
 if 'proceso_en_curso' not in st.session_state:
     st.session_state['proceso_en_curso'] = False
+if 'proceso_recien_empezado' not in st.session_state:
+    st.session_state['proceso_recien_empezado'] = False
+if 'Segmentacion_terminada' not in st.session_state:
+    st.session_state['Segmentacion_terminada'] = False
+
 
 # Directorio donde se guardarán los archivos CSV
 CSV_DIRECTORY = "/app/csv_results"
@@ -95,7 +101,7 @@ def extract_structure(img_path, structure):
 
     st.write(f"La diferencia entre volúmenes es de: {volume_difference}")
     asimetry = asimetria(left_output_path,right_output_path,structure)
-
+    st.session_state.norha_indexs[left_output_path] = asimetry
     # Agregar fila al archivo CSV específico
     new_row = {
         "Nombre de Archivo": filename,
@@ -148,7 +154,7 @@ def segmentar(img_path, name_subject):
 
     if response.status_code == 200:
         st.session_state['proceso_en_curso'] = True
-        st.success("Segmentación iniciada exitosamente.")
+        st.session_state['proceso_recien_empezado'] = True
     else:
         st.error(f"Error al iniciar la segmentación: {response.json().get('error')}")
 
@@ -159,12 +165,14 @@ def verificar_segmentacion(name_subject):
     
     # Verificar si el archivo existe en el volumen compartido
     if os.path.exists(final_path):
-        st.success(f"Segmentación completada. Archivo disponible en {final_path}.")
         st.session_state['proceso_en_curso'] = False
         # Guardar el archivo de salida en el estado de sesión
         if 'output_segmentation_files' not in st.session_state:
             st.session_state['output_segmentation_files'] = []
         st.session_state['output_segmentation_files'].append(final_path)
+        st.session_state['Segmentacion_terminada'] = True
+        st.rerun()
+
     else:
         st.info("La segmentación aún está en curso. Por favor, vuelve a comprobar más tarde.")
 
@@ -306,6 +314,8 @@ def tab_1():
     # Inicializar la lista de archivos extraídos en session_state si no existe
     if "output_segmentation_files" not in st.session_state:
         st.session_state.output_segmentation_files = []
+    if 'comienzo' not in st.session_state:
+        st.session_state.comienzo = None
 
     # Subir archivo
 
@@ -319,7 +329,7 @@ def tab_1():
 
         name_subject = st.text_input("Ingrese el nombre del paciente")
 
-        boton_segmentar = st.form_submit_button('Segmentar')
+        boton_segmentar = st.form_submit_button('Segmentar', disabled=st.session_state['proceso_en_curso'])
 
         if boton_segmentar:
             if uploaded_file and name_subject:
@@ -328,16 +338,32 @@ def tab_1():
                 else:
                     st.session_state['name_subject'] = name_subject
                     segmentar(img_path, name_subject)
+                    st.session_state.comienzo = datetime.now()
+                    st.rerun()
             else:
                 st.error("Por favor, sube un archivo e ingresa el nombre del paciente.")
 
-    # Configurar auto-refresh cada 30 segundos
-    if st.session_state['proceso_en_curso']:
-        verificar_segmentacion(st.session_state['name_subject'])
+    if st.session_state['Segmentacion_terminada']:
+        st.success(f"Segmentación completada. Archivo disponible en el lado izquierdo superior de la pagina para descargar")
+        st.session_state['Segmentacion_terminada'] = False
 
-    # Configurar auto-refresh cada 30 segundos
-    if st.session_state['proceso_en_curso']:
-        st_autorefresh(interval=30 * 1000, key="auto_refresh")  # Configura el refresco cada 30 segundos
+    if st.session_state['proceso_en_curso'] and not st.session_state['proceso_recien_empezado']:
+        st.write('Segmentacion en proceso, esto tarda alrededor de 15 minutos')
+        verificar_segmentacion(st.session_state['name_subject'])
+        delta = datetime.now() - st.session_state.comienzo
+        minutos = delta.seconds // 60
+        segundos = delta.seconds % 60
+        st.write(f"Han transcurrido {minutos} minutos y {segundos} segundos")
+        if st.button('Actualizar'):
+            pass
+    
+    if st.session_state['proceso_recien_empezado']:
+        st.success("Segmentación iniciada exitosamente.")
+        st.write('Este proceso tarda alrededor de 15 minutos')
+        st.session_state['proceso_recien_empezado'] = False
+        if st.button('Actualizar'):
+            pass
+            
 
 
 def tab_2():
@@ -346,14 +372,17 @@ def tab_2():
     # Inicializar la lista de archivos extraídos en session_state si no existe
     if "output_files" not in st.session_state:
         st.session_state.output_files = []
-    if 'mapa' not in st.session_state:
-        st.session_state.mapa = {}
+    if 'norha_indexs' not in st.session_state:
+        st.session_state.norha_indexs = {}
+    if 'mapa_npys' not in st.session_state:
+        st.session_state.mapa_npys = {}
 
     # Inicializar las variables para almacenar los paths si no existen en session_state
     if 'path_izq' not in st.session_state:
         st.session_state.path_izq = None
     if 'path_der' not in st.session_state:
         st.session_state.path_der = None
+
     if 'extraido' not in st.session_state:
         st.session_state.extraido = False  # Flag para controlar si se ha extraído
     if 'malla_vista' not in st.session_state:
@@ -361,7 +390,8 @@ def tab_2():
 
     # Opciones de archivos generados en `tab_1` y archivo subido manualmente
     with st.form("form_extraer"):
-        file_options = [None] + st.session_state.output_segmentation_files
+        #file_options = [None] + st.session_state.output_segmentation_files
+        file_options = [None] + [file.replace("/shared/", "") for file in st.session_state.output_segmentation_files]
         selected_file = None
         if st.session_state.output_segmentation_files:
             selected_file = st.selectbox("Seleccionar archivo de los que segmentaste", file_options)
@@ -371,7 +401,7 @@ def tab_2():
         img_path2 = None
 
         if selected_file is not None:
-            img_path2 = selected_file
+            img_path2 = f'/shared/{selected_file}'
         elif uploaded_file2 is not None:
             img_path2 = os.path.join("/app", uploaded_file2.name)
             with open(img_path2, "wb") as f:
@@ -400,24 +430,32 @@ def tab_2():
             st.error("Por favor, selecciona un archivo segmentado o sube uno manualmente y selecciona una estructura.")
     
     # Mostrar el botón "Ver malla" solo si ya se realizó la extracción y aún no se visualizó la malla
-    if st.session_state.extraido and st.session_state.malla_vista==False:
-        if st.button("Ver malla"):
+    if st.session_state.extraido:
+        if st.button("Ver malla",disabled=st.session_state.malla_vista):
             # Usar los paths almacenados en session_state
             if st.session_state.path_izq is not None and st.session_state.path_der is not None:
-                nombre = os.path.basename(st.session_state.path_izq).split('_left')[0]
-                structure = os.path.splitext(os.path.basename(st.session_state.path_izq).split('_left_')[1])[0]
                 with st.spinner('Creando la malla de la imagen, por favor espera...'):
                     file_npy = generar_npy(st.session_state.path_izq, st.session_state.path_der,st.session_state.structure)
-                with st.expander(f"{structure} de la imagen {nombre}"):
-                    visor3D(st.session_state.path_izq, st.session_state.path_der)
-                    malla(st.session_state.path_izq, file_npy)
                 st.session_state.malla_vista = True
-                st.session_state.mapa[st.session_state.path_izq] = file_npy
-                st.session_state.path_izq = None
-                st.session_state.path_der = None
+                st.session_state.mapa_npys[st.session_state.path_izq] = file_npy
+                st.rerun()
     
             else:
                 st.error("ya se hizo la malla de esta imagen")
+
+    if st.session_state.malla_vista:
+        st.session_state.malla_vista = False
+        st.session_state.extraido = False
+        nombre = os.path.basename(st.session_state.path_izq).split('_left')[0]
+        structure = os.path.splitext(os.path.basename(st.session_state.path_izq).split('_left_')[1])[0]
+        grafico_norah(st.session_state.norha_indexs[st.session_state.path_izq])
+        with st.expander(f"{structure} de la imagen {nombre}"):
+            visor3D(st.session_state.path_izq, st.session_state.path_der)
+            malla(st.session_state.path_izq, st.session_state.mapa_npys[st.session_state.path_izq])
+        st.session_state.path_izq = None
+        st.session_state.path_der = None
+        st.write('Se podra ver todo esto en la pestaña "imagenes"')
+    
 
 
 
@@ -438,8 +476,9 @@ def tab_3():
                 structure = os.path.splitext(os.path.basename(path_izquierdo).split('_left_')[1])[0]
                 with st.expander(f"{structure} de la imagen {nombre}"):
                     visor3D(path_izquierdo, path_derecho)
-                    if path_izquierdo in st.session_state.mapa:
-                        malla(path_izquierdo, st.session_state.mapa[path_izquierdo])
+                    if path_izquierdo in st.session_state.mapa_npys:
+                        malla(path_izquierdo, st.session_state.mapa_npys[path_izquierdo])
+                    grafico_norah(st.session_state.norha_indexs[path_izquierdo])
     else:
         st.write("Aun no hay imagenes para mostrar")
 
