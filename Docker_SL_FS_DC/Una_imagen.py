@@ -179,64 +179,52 @@ def verificar_segmentacion(name_subject):
 
 
 
-def visor3D(path_izq,path_der):
-    # Columns for left and right thalamus with increased separation
+@st.cache_data
+def load_structure(path):
+    # Cargar y procesar la estructura (esta parte es costosa)
+    structure_data = nib.load(path).get_fdata()
+    structure_data_flip = np.flip(structure_data, axis=0).copy()
+    verts, faces, normals, values = measure.marching_cubes(structure_data_flip, 0.5)
+    faces = faces[:, ::-1]
+    mesh = trimesh.Trimesh(vertices=verts, faces=faces)
+    mesh = smoothing.filter_laplacian(
+        mesh.subdivide_loop(),
+        lamb=0.5,
+        iterations=10,
+        implicit_time_integration=False,
+        volume_constraint=True
+    )
+    return mesh
+
+def visor3D(path_izq, path_der):
+    # Obtener el nombre de la estructura
     structure = os.path.splitext(os.path.basename(path_izq).split('_left_')[1])[0]
     cols = st.columns([1, 0.2, 1], gap="medium")
-    # Load left estructure data
-    path_izq = nib.load(path_izq)
-    left_structure_data = path_izq.get_fdata()
-    left_structure_data_flip = np.flip(left_structure_data, axis=0).copy()
 
-    # Extract surface mesh for left structure
-    verts_left, faces_left, normals_left, values_left = measure.marching_cubes(left_structure_data_flip, 0.5)
-    faces_left = faces_left[:, ::-1]
-    mesh_left = trimesh.Trimesh(vertices=verts_left, faces=faces_left)
-    mesh_left = smoothing.filter_laplacian(
-        mesh_left.subdivide_loop(),
-        lamb=0.5,
-        iterations=10,
-        implicit_time_integration=False,
-        volume_constraint=True
-    )
+    # Cachear la carga y el procesamiento de las estructuras
+    mesh_left = load_structure(path_izq)
+    mesh_right = load_structure(path_der)
 
-    # Load right structure data
-    right_structure = nib.load(path_der)
-    right_structure_data = right_structure.get_fdata()
-    right_structure_data_flip = np.flip(right_structure_data, axis=0).copy()
-
-    # Extract surface mesh for right structure
-    verts_right, faces_right, normals_right, values_right = measure.marching_cubes(right_structure_data_flip, 0.5)
-    faces_right = faces_right[:, ::-1]
-    mesh_right = trimesh.Trimesh(vertices=verts_right, faces=faces_right)
-    mesh_right = smoothing.filter_laplacian(
-        mesh_right.subdivide_loop(),
-        lamb=0.5,
-        iterations=10,
-        implicit_time_integration=False,
-        volume_constraint=True
-    )
-
-    # Plot left structure
+    # Renderizado para la estructura izquierda
     with cols[0]:
-        plotter_left = pv.Plotter(window_size=[300, 300])  # Set to square window
+        plotter_left = pv.Plotter(window_size=[300, 300])  # Ventana cuadrada
         plotter_left.add_mesh(mesh_left, cmap='bwr', line_width=1, label=f"Left {structure}")
         plotter_left.add_scalar_bar()
         plotter_left.view_isometric()
-        plotter_left.add_text(f"Left {structure}", position='upper_left', font_size=12, color='black')  # Add title
+        plotter_left.add_text(f"Left {structure}", position='upper_left', font_size=12, color='black')
         stpyvista(plotter_left)
 
-    # Add a space between plots for separation
+    # Espacio entre los plots
     with cols[1]:
-        st.write("")  # This column is used to create space between the plots
+        st.write("")
 
-    # Plot right structure
+    # Renderizado para la estructura derecha
     with cols[2]:
-        plotter_right = pv.Plotter(window_size=[300, 300])  # Set to square window
+        plotter_right = pv.Plotter(window_size=[300, 300])  # Ventana cuadrada
         plotter_right.add_mesh(mesh_right, cmap='bwr', line_width=1, label=f"Right {structure}")
         plotter_right.add_scalar_bar()
         plotter_right.view_isometric()
-        plotter_right.add_text(f"Right {structure}", position='upper_left', font_size=12, color='black')  # Add title
+        plotter_right.add_text(f"Right {structure}", position='upper_left', font_size=12, color='black')
         stpyvista(plotter_right)
 
 
