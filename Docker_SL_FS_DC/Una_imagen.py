@@ -228,67 +228,65 @@ def visor3D(path_izq, path_der):
         stpyvista(plotter_right)
 
 
-def malla(path_izq,file_npy):
-    st.header("malla")
+@st.cache_data
+def process_volume(path_izq):
+    """Carga y procesa el volumen cerebral, devolviendo la malla procesada."""
     brain_vol = nib.load(path_izq)
-    # Check the type of the brain volume object
-    print(type(brain_vol))
-
-
-    # Extract data from the brain volume object
     brain_vol_data = brain_vol.get_fdata()
-    brain_vol_data_flip = np.flip(brain_vol_data,axis=0).copy()
-    print(type(brain_vol_data))
-    print(brain_vol_data.shape)
+    brain_vol_data_flip = np.flip(brain_vol_data, axis=0).copy()
 
-
-    # Apply the marching cubes algorithm to extract surface mesh
+    # Aplicar el algoritmo de Marching Cubes
     verts, faces, normals, values = measure.marching_cubes(brain_vol_data_flip, 0.5)
-
-    # Orient faces
     faces = faces[:, ::-1]
 
-
-    # Load the mesh
+    # Crear la malla y aplicar suavizado
     mesh = trimesh.Trimesh(vertices=verts, faces=faces)
-
-    # Apply Loop subdivision
     subdivided_mesh = mesh.subdivide_loop()
-    # Apply Laplacian smoothing
-    smoothed_mesh = trimesh.smoothing.filter_laplacian(subdivided_mesh, lamb=0.5, iterations=10, implicit_time_integration=False, volume_constraint=True, laplacian_operator=None)
-    scalar_field = file_npy
+    smoothed_mesh = trimesh.smoothing.filter_laplacian(
+        subdivided_mesh, lamb=0.5, iterations=10,
+        implicit_time_integration=False, volume_constraint=True
+    )
+    return smoothed_mesh
 
-    # Apply Gaussian smoothing
-    sigma = 1  # Standard deviation of the Gaussian kernel, adjust as needed
-    smoothed_scalar_field = gaussian_filter(scalar_field, sigma)
+@st.cache_data
+def process_scalar_field(scalar_field):
+    """Aplica un filtro Gaussiano al campo escalar."""
+    sigma = 1  # Parámetro del filtro Gaussiano
+    return gaussian_filter(scalar_field, sigma)
 
-    # Map scalar values from the field onto the mesh vertices
+def malla(path_izq, file_npy):
+    st.header("malla")
+
+    # Cachear la carga y procesamiento del volumen cerebral
+    smoothed_mesh = process_volume(path_izq)
+
+    # Cachear el suavizado Gaussiano del campo escalar
+    smoothed_scalar_field = process_scalar_field(file_npy)
+
+    # Mapear los valores escalares a los vértices de la malla
     vertex_coords = smoothed_mesh.vertices - 0.5
     scalar_values_at_vertices = map_coordinates(smoothed_scalar_field, vertex_coords.T, order=1, mode='nearest')
 
-    # Calculate average scalar value per face of the mesh
+    # Calcular el valor escalar promedio por cara de la malla
     average_scalar_per_face = scalar_values_at_vertices[smoothed_mesh.faces.astype("int")].mean(axis=1)
-    # Convert the mesh to PyVista format
-    pv_mesh = pv.PolyData(smoothed_mesh.vertices, np.hstack((np.full((smoothed_mesh.faces.shape[0], 1), 3), smoothed_mesh.faces)).astype('int'))
 
-    # Add scalar data to PyVista mesh
+    # Convertir la malla a formato PyVista
+    pv_mesh = pv.PolyData(smoothed_mesh.vertices, np.hstack((np.full((smoothed_mesh.faces.shape[0], 1), 3), smoothed_mesh.faces)).astype('int'))
     pv_mesh["average_scalar"] = average_scalar_per_face
 
-    # Normalize and map the scalar values to colors for visualization
+    # Normalizar y mapear los valores escalares a colores para la visualización
     norm = mcolors.Normalize(vmin=average_scalar_per_face.min(), vmax=average_scalar_per_face.max())
     colormap = plt.cm.plasma
     colors = colormap(norm(average_scalar_per_face))
 
-    # Initialize a PyVista plotter
+    # Inicializar un plotter de PyVista
     plotter = pv.Plotter(window_size=[600, 600])
     plotter.add_mesh(pv_mesh, scalars='average_scalar', cmap='plasma', show_edges=True)
-
-    # Final touches
     plotter.view_isometric()
     plotter.add_scalar_bar()
     plotter.background_color = 'white'
 
-    # Display the PyVista plot using stpyvista
+    # Mostrar el gráfico en Streamlit
     stpyvista(plotter)
 
 
