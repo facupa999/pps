@@ -36,7 +36,7 @@ Example_input = [torch.unsqueeze(torch.cat((torch.unsqueeze(image, 0),torch.unsq
 
 from Models.LeNet_ELU_SVDD import Encoder  # Importar la clase o módulo necesario
 # Model class must be defined somewhere
-model = torch.load(f"/app/{estructura}.pt")
+model = torch.load(f"/app/Models/{estructura}.pt")
 model.eval()
 
 inference = model(Example_input).cpu().detach().numpy()

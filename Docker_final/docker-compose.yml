@@ -1,0 +1,36 @@
+services:
+  streamlit:
+    build:
+      context: .
+      dockerfile: Dockerfile_streamlit
+    container_name: streamlit_app
+    ports:
+      - "8501:8501"
+    volumes:
+      - shared:/shared
+    depends_on:
+      - segmentacion
+    networks:
+      - app_network
+
+  segmentacion:
+    build:
+      context: .
+      dockerfile: Dockerfile_fast_surfer
+    user: root 
+    container_name: segmentacion_service
+    volumes:
+      - shared:/shared
+    environment:
+      FS_LICENSE: /fastsurfer/fs_license/license.txt
+    ports:
+      - "5000:5000"  # Exponer el puerto 5000 para comunicación HTTP
+    networks:
+      - app_network
+
+volumes:
+  shared:
+
+networks:
+  app_network:
+    driver: bridge
