@@ -30,7 +30,10 @@ import requests
 from streamlit_autorefresh import st_autorefresh  
 from datetime import datetime
 
-
+import joblib
+from sklearn.preprocessing import StandardScaler
+modelo_entrenado = joblib.load('/app/Models/ModelosPatologia/modelo_SpmRbfNorahAsimetria_am_hip_tal_ADNI.pkl')
+scaler = joblib.load('/app/Models/ModelosPatologia/scaler_SpmRbfNorahAsimetria_am_hip_tal_ADNI.pkl')
 
 # Inicializar Xvfb para PyVista
 pv.start_xvfb()
@@ -38,7 +41,7 @@ pv.start_xvfb()
 # Estructuras válidas
 VALID_STRUCTURES = ["amygdala", "putamen", "pallidum", "hippocampus", "thalamus"]
 
-st.markdown("# Una sola imagen")
+st.markdown("# Norah")
 
 if 'proceso_en_curso' not in st.session_state:
     st.session_state['proceso_en_curso'] = False
@@ -102,15 +105,18 @@ def extract_structure(img_path, structure):
 
 
     st.write(f"La diferencia entre volúmenes es de: {volume_difference}")
-    asimetry = asimetria(left_output_path,right_output_path,structure)
-    st.session_state.norha_indexs[left_output_path] = asimetry
+    norah = asimetria(left_output_path,right_output_path,structure)
+    
+    asimetriaFormula = ((right_volume - left_volume) / (right_volume + left_volume)) * 100
+
+    st.session_state.norha_indexs[left_output_path] = norah
     # Agregar fila al archivo CSV específico
     new_row = {
         "Nombre de Archivo": filename,
         "Volumen Izquierdo": left_volume,
         "Volumen Derecho": right_volume,
-        "Diferencia de Volumen": volume_difference,
-        "Asimetria": asimetry
+        "Asimetria": asimetriaFormula,
+        "Norah": norah
     }
     
 
@@ -290,6 +296,55 @@ def malla(path_izq, file_npy):
 
     # Mostrar el gráfico en Streamlit
     stpyvista(plotter)
+
+
+def extract_all_structures(img_path):
+    # Cargar imagen
+    img = nib.load(img_path)
+    data = img.get_fdata()
+
+    filename = os.path.basename(img_path)
+
+    # Definir las estructuras y sus valores correspondientes
+    structures = {
+        "amygdala": (18, 54),
+        # "putamen": (12, 51),
+        # "pallidum": (13, 52),
+        "hippocampus": (17, 53),
+        "thalamus": (10, 49)
+    }
+    extraciones = {}
+
+    for structure, (left_value, right_value) in structures.items():
+        # Extraer la estructura izquierda
+        left_structure = np.where(data == left_value, data, 0)
+        left_img = nib.Nifti1Image(left_structure, img.affine, img.header)
+        left_output_path = os.path.join("/app", filename.replace(".mgz", f"_left_{structure}.nii"))
+        nib.save(left_img, left_output_path)
+        extraciones[f"{structure}_left"] = left_output_path
+
+        # Extraer la estructura derecha
+        right_structure = np.where(data == right_value, data, 0)
+        right_img = nib.Nifti1Image(right_structure, img.affine, img.header)
+        right_output_path = os.path.join("/app", filename.replace(".mgz", f"_right_{structure}.nii"))
+        nib.save(right_img, right_output_path)
+        extraciones[f"{structure}_right"] = right_output_path
+
+    # Variables con los paths de cada extracción
+    amygdala_left_path = extraciones["amygdala_left"]
+    amygdala_right_path = extraciones["amygdala_right"]
+    # putamen_left_path = extraciones["putamen_left"]
+    # putamen_right_path = extraciones["putamen_right"]
+    # pallidum_left_path = extraciones["pallidum_left"]
+    # pallidum_right_path = extraciones["pallidum_right"]
+    hippocampus_left_path = extraciones["hippocampus_left"]
+    hippocampus_right_path = extraciones["hippocampus_right"]
+    thalamus_left_path = extraciones["thalamus_left"]
+    thalamus_right_path = extraciones["thalamus_right"]
+
+    # return amygdala_left_path, amygdala_right_path, putamen_left_path, putamen_right_path, pallidum_left_path, pallidum_right_path, hippocampus_left_path, hippocampus_right_path, thalamus_left_path, thalamus_right_path
+    return amygdala_left_path, amygdala_right_path, hippocampus_left_path, hippocampus_right_path, thalamus_left_path, thalamus_right_path
+
 
 
 
@@ -493,6 +548,175 @@ def tab_4():
                     mime='text/csv'
                 )
 
+def tab_5():
+    st.title("Prediccion de patologia")
+    with st.form("form_predecir"):
+        uploaded_file3 = st.file_uploader("Subir archivo .mgz", type=["mgz"])
+        if uploaded_file3 is not None:
+            img_path3 = os.path.join("/app", uploaded_file3.name)
+            with open(img_path3, "wb") as f:
+                f.write(uploaded_file3.getbuffer())
+        Predecir = st.form_submit_button('Predecir')
+    if Predecir:                                        #se quitaron putamen y pallidum ya que no se usan en el modelo y anduvo mejor sin estos, pero se deja comentado por si sirven en un futuro
+        if uploaded_file3 is not None:
+            # amygdala_left_path, amygdala_right_path, putamen_left_path, putamen_right_path, pallidum_left_path, pallidum_right_path, hippocampus_left_path, hippocampus_right_path, thalamus_left_path, thalamus_right_path = extract_all_structures(img_path3)
+            # norah_amygdala, asimetria_amygdala, norah_putamen, asimetria_putamen, norah_pallidum, asimetria_pallidum, norah_hippocampus, asimetria_hippocampus, norah_thalamus, asimetria_thalamus = calcular_indices(amygdala_left_path, amygdala_right_path, putamen_left_path, putamen_right_path, pallidum_left_path, pallidum_right_path, hippocampus_left_path, hippocampus_right_path, thalamus_left_path, thalamus_right_path)
+            amygdala_left_path, amygdala_right_path, hippocampus_left_path, hippocampus_right_path, thalamus_left_path, thalamus_right_path = extract_all_structures(img_path3)
+            # norah_amygdala, asimetria_amygdala, norah_hippocampus, asimetria_hippocampus, norah_thalamus, asimetria_thalamus = calcular_indices(amygdala_left_path, amygdala_right_path, putamen_left_path, putamen_right_path, pallidum_left_path, pallidum_right_path, hippocampus_left_path, hippocampus_right_path, thalamus_left_path, thalamus_right_path)
+            norah_amygdala, asimetria_amygdala, norah_hippocampus, asimetria_hippocampus, norah_thalamus, asimetria_thalamus = calcular_indices(amygdala_left_path, amygdala_right_path, hippocampus_left_path, hippocampus_right_path, thalamus_left_path, thalamus_right_path)
+            # prediccion = calcular_patologia(norah_amygdala, asimetria_amygdala, norah_putamen, asimetria_putamen, norah_pallidum, asimetria_pallidum, norah_hippocampus, asimetria_hippocampus, norah_thalamus, asimetria_thalamus)
+            prediccion = calcular_patologia(norah_amygdala, asimetria_amygdala, norah_hippocampus, asimetria_hippocampus, norah_thalamus, asimetria_thalamus)
+            #st.write(f"La predicción de la patología es: {prediccion}")
+
+            # Crear un DataFrame para mostrar las probabilidades
+            df_prediccion = pd.DataFrame(list(prediccion.items()), columns=['Patología', 'Probabilidad'])
+            # Obtener la patología con la mayor probabilidad
+            patologia_mas_probable = df_prediccion.loc[df_prediccion['Probabilidad'].idxmax(), 'Patología']
+            
+            
+            # Diccionario para traducir las patologías
+            traduccion_patologias = {
+                "MCI": "Deterioro Cognitivo Leve",
+                "AD": "Alzheimer",
+                "CN": "Control Normal"
+            }
+
+            # Mostrar la patología más probable como un KPI destacado
+            st.metric(label="-",label_visibility="hidden",value=traduccion_patologias[patologia_mas_probable], delta=f"{df_prediccion['Probabilidad'].max():.2%}")
+
+            # Mostrar las demás probabilidades
+            for index, row in df_prediccion.iterrows():
+                if row['Patología'] != patologia_mas_probable:
+                    st.write(f"**{traduccion_patologias[row['Patología']]}**: {row['Probabilidad']:.2%}")
+
+
+
+
+        else:
+            st.error("Por favor, sube un archivo .nii para asi predecir la patologia.")   
+
+
+
+
+#def calcular_patologia(norah_amygdala, asimetria_amygdala, norah_putamen, asimetria_putamen, norah_pallidum, asimetria_pallidum, norah_hippocampus, asimetria_hippocampus, norah_thalamus, asimetria_thalamus):
+def calcular_patologia(norah_amygdala, asimetria_amygdala, norah_hippocampus, asimetria_hippocampus, norah_thalamus, asimetria_thalamus):
+ 
+    # Asegurarse de que todos los índices sean valores escalares
+    indices = [
+        float(norah_amygdala), float(asimetria_amygdala),
+        #se quitaron putamen y pallidum ya que no se usan en el modelo y anduvo mejor sin estos
+        #float(norah_putamen), float(asimetria_putamen),
+        #float(norah_pallidum), float(asimetria_pallidum),
+        float(norah_hippocampus), float(asimetria_hippocampus),
+        float(norah_thalamus), float(asimetria_thalamus)
+    ]
+
+    #columnas = ['Norah_Amygdala', 'Asimetria_Amygdala', 'Norah_Putamen', 'Asimetria_Putamen', 
+    #        'Norah_Pallidum', 'Asimetria_Pallidum', 'Norah_Hippocampus', 'Asimetria_Hippocampus', 
+    #        'Norah_Thalamus', 'Asimetria_Thalamus']
+    columnas = ['Norah_Amygdala', 'Asimetria_Amygdala', 
+            'Norah_Hippocampus', 'Asimetria_Hippocampus', 
+            'Norah_Thalamus', 'Asimetria_Thalamus']
+    
+    
+    indices_df = pd.DataFrame([indices], columns=columnas)
+
+
+    # Escalar los índices utilizando el escalador cargado
+    #indices_scaled = scaler.transform(indices_array)
+    indices_scaled = scaler.transform(indices_df)
+    
+    # Verificar los valores escalados
+    #print("Índices originales:", indices)
+    #print("Índices escalados:", indices_scaled)
+    
+    # Realizar la predicción utilizando el modelo entrenado
+    probabilidades = modelo_entrenado.predict_proba(indices_scaled)
+    
+    # Obtener las clases del modelo
+    clases = modelo_entrenado.classes_
+    
+    # Crear un diccionario con las probabilidades y las clases
+    resultado = {clase: probabilidad for clase, probabilidad in zip(clases, probabilidades[0])}
+    
+    # Imprimir las probabilidades para depuración
+    print("Probabilidades:", probabilidades)
+    prediccion_clase = modelo_entrenado.predict(indices_scaled)
+    print(f"Clase predicha directamente: {prediccion_clase}")
+    
+    return resultado
+
+#def calcular_indices(amygdala_left_path, amygdala_right_path, putamen_left_path, putamen_right_path, pallidum_left_path, pallidum_right_path, hippocampus_left_path, hippocampus_right_path, thalamus_left_path, thalamus_right_path):
+def calcular_indices(amygdala_left_path, amygdala_right_path, hippocampus_left_path, hippocampus_right_path, thalamus_left_path, thalamus_right_path):
+ 
+    amygdala_left_img = nib.load(amygdala_left_path)
+    amygdala_right_img = nib.load(amygdala_right_path)
+    # putamen_left_img = nib.load(putamen_left_path)
+    # putamen_right_img = nib.load(putamen_right_path)
+    # pallidum_left_img = nib.load(pallidum_left_path)
+    # pallidum_right_img = nib.load(pallidum_right_path)
+    hippocampus_left_img = nib.load(hippocampus_left_path)
+    hippocampus_right_img = nib.load(hippocampus_right_path)
+    thalamus_left_img = nib.load(thalamus_left_path)
+    thalamus_right_img = nib.load(thalamus_right_path)
+
+    # Calcular los volúmenes y las asimetrías
+    amygdala_left_volume = (amygdala_left_img.get_fdata() > 0).sum()
+    amygdala_right_volume = (amygdala_right_img.get_fdata() > 0).sum()
+    asimetria_amygdala = ((amygdala_right_volume - amygdala_left_volume) / (amygdala_right_volume + amygdala_left_volume)) * 100
+
+    # putamen_left_volume = (putamen_left_img.get_fdata() > 0).sum()
+    # putamen_right_volume = (putamen_right_img.get_fdata() > 0).sum()
+    # asimetria_putamen = ((putamen_right_volume - putamen_left_volume) / (putamen_right_volume + putamen_left_volume)) * 100
+
+    # pallidum_left_volume = (pallidum_left_img.get_fdata() > 0).sum()
+    # pallidum_right_volume = (pallidum_right_img.get_fdata() > 0).sum()
+    # asimetria_pallidum = ((pallidum_right_volume - pallidum_left_volume) / (pallidum_right_volume + pallidum_left_volume)) * 100
+
+    hippocampus_left_volume = (hippocampus_left_img.get_fdata() > 0).sum()
+    hippocampus_right_volume = (hippocampus_right_img.get_fdata() > 0).sum()
+    asimetria_hippocampus = ((hippocampus_right_volume - hippocampus_left_volume) / (hippocampus_right_volume + hippocampus_left_volume)) * 100
+
+    thalamus_left_volume = (thalamus_left_img.get_fdata() > 0).sum()
+    thalamus_right_volume = (thalamus_right_img.get_fdata() > 0).sum()
+    asimetria_thalamus = ((thalamus_right_volume - thalamus_left_volume) / (thalamus_right_volume + thalamus_left_volume)) * 100
+
+   
+
+    # Preprocesar las imágenes para calcular los índices Norah
+    amygdala_left_img = preprocess_image_file_for_anomaly_detection(amygdala_left_img)
+    amygdala_right_img = preprocess_image_file_for_anomaly_detection(amygdala_right_img)
+    # putamen_left_img = preprocess_image_file_for_anomaly_detection(putamen_left_img)
+    # putamen_right_img = preprocess_image_file_for_anomaly_detection(putamen_right_img)
+    # pallidum_left_img = preprocess_image_file_for_anomaly_detection(pallidum_left_img)
+    # pallidum_right_img = preprocess_image_file_for_anomaly_detection(pallidum_right_img)
+    hippocampus_left_img = preprocess_image_file_for_anomaly_detection(hippocampus_left_img)
+    hippocampus_right_img = preprocess_image_file_for_anomaly_detection(hippocampus_right_img)
+    thalamus_left_img = preprocess_image_file_for_anomaly_detection(thalamus_left_img)
+    thalamus_right_img = preprocess_image_file_for_anomaly_detection(thalamus_right_img)
+
+    nib.save(amygdala_left_img, amygdala_left_path)
+    nib.save(amygdala_right_img, amygdala_right_path)
+    # nib.save(putamen_left_img, putamen_left_path)
+    # nib.save(putamen_right_img, putamen_right_path)
+    # nib.save(pallidum_left_img, pallidum_left_path)
+    # nib.save(pallidum_right_img, pallidum_right_path)
+    nib.save(hippocampus_left_img, hippocampus_left_path)
+    nib.save(hippocampus_right_img, hippocampus_right_path)
+    nib.save(thalamus_left_img, thalamus_left_path)
+    nib.save(thalamus_right_img, thalamus_right_path)
+
+
+
+    # Calcular los índices Norah
+    norah_amygdala = norah(amygdala_left_path, amygdala_right_path, "amygdala")[0]
+    # norah_putamen = norah(putamen_left_path, putamen_right_path, "putamen")[0]
+    # norah_pallidum = norah(pallidum_left_path, pallidum_right_path, "pallidum")[0]
+    norah_hippocampus = norah(hippocampus_left_path, hippocampus_right_path, "hippocampus")[0]
+    norah_thalamus = norah(thalamus_left_path, thalamus_right_path, "thalamus")[0]
+
+    #return norah_amygdala, asimetria_amygdala, norah_putamen, asimetria_putamen, norah_pallidum, asimetria_pallidum, norah_hippocampus, asimetria_hippocampus, norah_thalamus, asimetria_thalamus
+    return norah_amygdala, asimetria_amygdala, norah_hippocampus, asimetria_hippocampus, norah_thalamus, asimetria_thalamus
 
 def asimetria(image,imagepair,structure):
     NORAH_index,c,model,Example_input = norah(image,imagepair,structure)
@@ -728,7 +952,7 @@ def negative_occlusion(img, patch, stride, c, trainedModel):
     return occluded_baseline, negative_occluded_baseline, positive_occluded_baseline
 
 
-tab1, tab2, tab3, tab4 = st.tabs(["Segmentar Imagen", "Imagen ya Segmentada","imagenes" ,"Resultados"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["Segmentar Imagen", "Imagen ya Segmentada","imagenes" ,"Resultados", "Prediccion de patologia"])
 with tab1:
     tab_1()
 
@@ -740,6 +964,9 @@ with tab3:
 
 with tab4:
     tab_4()
+
+with tab5:
+    tab_5()
 
 
 if "output_segmentation_files" in st.session_state or "output_files" in st.session_state:
