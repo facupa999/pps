@@ -154,6 +154,17 @@ def segmentar(img_path, name_subject):
     # Mover la imagen al volumen compartido
     shutil.move(img_path, shared_img_path)
 
+    # Hacer una solicitud HTTP al contenedor de preprocesamiento
+    response1 = requests.post("http://preprocess_service:5001/preprocess", json={
+        "img_path": shared_img_path,  # Usar la nueva ruta en el volumen compartido
+    })
+
+    if response1.status_code == 200:
+        st.success("Preprocesamiento completado exitosamente, ahora se procede con la segmentacion")
+    else:
+        st.error(f"Error al preprocesar la imagen: {response1.json().get('error')}")
+
+
     # Hacer una solicitud HTTP al contenedor de segmentación
     response = requests.post("http://segmentacion_service:5000/segmentar", json={
         "img_path": shared_img_path,  # Usar la nueva ruta en el volumen compartido

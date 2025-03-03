@@ -18,6 +18,6 @@ RUN apt-get update && apt-get install -y \
 
 RUN pip install --upgrade pip setuptools wheel
 
-RUN pip install numpy==1.24.4 surfa nppy==0.2.0
+RUN pip install numpy==1.24.4 surfa==0.6.0 nppy==0.2.0
 
 CMD ["python"]

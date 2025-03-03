@@ -10,6 +10,7 @@ services:
       - shared:/shared
     depends_on:
       - segmentacion
+      - preprocess
     networks:
       - app_network
 
@@ -25,6 +26,18 @@ services:
       FS_LICENSE: /fastsurfer/fs_license/license.txt
     ports:
       - "5000:5000"  # Exponer el puerto 5000 para comunicación HTTP
+    networks:
+      - app_network
+
+  preprocess:
+    build:
+      context: .
+      dockerfile: Dockerfile_nppy
+    container_name: preprocess_service
+    volumes:
+      - shared:/shared
+    ports:
+      - "5001:5001"
     networks:
       - app_network
 
