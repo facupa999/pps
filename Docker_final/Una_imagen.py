@@ -32,8 +32,13 @@ from datetime import datetime
 
 import joblib
 from sklearn.preprocessing import StandardScaler
-modelo_entrenado = joblib.load('/app/Models/ModelosPatologia/modelo_SpmRbfNorahAsimetria_am_hip_tal_ADNI.pkl')
-scaler = joblib.load('/app/Models/ModelosPatologia/scaler_SpmRbfNorahAsimetria_am_hip_tal_ADNI.pkl')
+modelo_entrenadoSVM = joblib.load('/app/Models/ModelosPatologia/modelo_SpmRbfNorahAsimetria_am_hip_tal_ADNI.pkl')
+scalerSVM = joblib.load('/app/Models/ModelosPatologia/scaler_SpmRbfNorahAsimetria_am_hip_tal_ADNI.pkl')
+
+modelo_entrenadoKNN = joblib.load('/app/Models/ModelosPatologia/modelo_KNNNorahAsimetria_am_hip_tal_ADNI.pkl')
+scalerKNN = joblib.load('/app/Models/ModelosPatologia/scaler_KNNNorahAsimetria_am_hip_tal_ADNI.pkl')
+
+modelo_entrenadoRF = joblib.load('/app/Models/ModelosPatologia/modelo_RFNorahAsimetria_am_hip_tal_ADNI.pkl')
 
 # Inicializar Xvfb para PyVista
 pv.start_xvfb()
@@ -155,9 +160,10 @@ def segmentar(img_path, name_subject):
     shutil.move(img_path, shared_img_path)
 
     # Hacer una solicitud HTTP al contenedor de preprocesamiento
-    response1 = requests.post("http://preprocess_service:5001/preprocess", json={
-        "img_path": shared_img_path,  # Usar la nueva ruta en el volumen compartido
-    })
+    with st.spinner('Pre-Procesando la imagen, por favor espera...'):
+        response1 = requests.post("http://preprocess_service:5001/preprocess", json={
+            "img_path": shared_img_path,  # Usar la nueva ruta en el volumen compartido
+        })
 
     if response1.status_code == 200:
         st.success("Preprocesamiento completado exitosamente, ahora se procede con la segmentacion")
@@ -575,14 +581,14 @@ def tab_5():
             amygdala_left_path, amygdala_right_path, hippocampus_left_path, hippocampus_right_path, thalamus_left_path, thalamus_right_path = extract_all_structures(img_path3)
             # norah_amygdala, asimetria_amygdala, norah_hippocampus, asimetria_hippocampus, norah_thalamus, asimetria_thalamus = calcular_indices(amygdala_left_path, amygdala_right_path, putamen_left_path, putamen_right_path, pallidum_left_path, pallidum_right_path, hippocampus_left_path, hippocampus_right_path, thalamus_left_path, thalamus_right_path)
             norah_amygdala, asimetria_amygdala, norah_hippocampus, asimetria_hippocampus, norah_thalamus, asimetria_thalamus = calcular_indices(amygdala_left_path, amygdala_right_path, hippocampus_left_path, hippocampus_right_path, thalamus_left_path, thalamus_right_path)
-            # prediccion = calcular_patologia(norah_amygdala, asimetria_amygdala, norah_putamen, asimetria_putamen, norah_pallidum, asimetria_pallidum, norah_hippocampus, asimetria_hippocampus, norah_thalamus, asimetria_thalamus)
-            prediccion = calcular_patologia(norah_amygdala, asimetria_amygdala, norah_hippocampus, asimetria_hippocampus, norah_thalamus, asimetria_thalamus)
+            # predicciones = calcular_patologia(norah_amygdala, asimetria_amygdala, norah_putamen, asimetria_putamen, norah_pallidum, asimetria_pallidum, norah_hippocampus, asimetria_hippocampus, norah_thalamus, asimetria_thalamus)
+            predicciones = calcular_patologia(norah_amygdala, asimetria_amygdala, norah_hippocampus, asimetria_hippocampus, norah_thalamus, asimetria_thalamus)
             #st.write(f"La predicción de la patología es: {prediccion}")
 
             # Crear un DataFrame para mostrar las probabilidades
-            df_prediccion = pd.DataFrame(list(prediccion.items()), columns=['Patología', 'Probabilidad'])
+            #df_prediccion = pd.DataFrame(list(prediccion.items()), columns=['Patología', 'Probabilidad'])
             # Obtener la patología con la mayor probabilidad
-            patologia_mas_probable = df_prediccion.loc[df_prediccion['Probabilidad'].idxmax(), 'Patología']
+            #patologia_mas_probable = df_prediccion.loc[df_prediccion['Probabilidad'].idxmax(), 'Patología']
             
             
             # Diccionario para traducir las patologías
@@ -592,16 +598,30 @@ def tab_5():
                 "CN": "Control Normal"
             }
 
-            # Mostrar la patología más probable como un KPI destacado
-            st.metric(label="-",label_visibility="hidden",value=traduccion_patologias[patologia_mas_probable], delta=f"{df_prediccion['Probabilidad'].max():.2%}")
+            # Iterar sobre los resultados de cada modelo
+            for modelo, prediccion in predicciones.items():
+                df_prediccion = pd.DataFrame(list(prediccion.items()), columns=['Patología', 'Probabilidad'])
 
-            # Mostrar las demás probabilidades
-            for index, row in df_prediccion.iterrows():
-                if row['Patología'] != patologia_mas_probable:
-                    st.write(f"**{traduccion_patologias[row['Patología']]}**: {row['Probabilidad']:.2%}")
+                # Obtener la patología con la mayor probabilidad
+                patologia_mas_probable = df_prediccion.loc[df_prediccion['Probabilidad'].idxmax(), 'Patología']
+                
+                # Mostrar el modelo en grande
+                st.markdown(f"<h2 style='text-align: center; color: white;'>{modelo}</h2>", unsafe_allow_html=True)
+                
+                # Mostrar la patología más probable en tamaño mediano
+                st.markdown(f"<h3 style='text-align: center; color: lightblue;'>{traduccion_patologias[patologia_mas_probable]}</h3>", unsafe_allow_html=True)
+                
+                # Mostrar la probabilidad de la patología principal en verde
+                st.markdown(f"<p style='text-align: center; color: green; font-size: 20px;'>↑ {df_prediccion['Probabilidad'].max():.2%}</p>", unsafe_allow_html=True)
 
-
-
+                # Mostrar las demás probabilidades centradas
+                for index, row in df_prediccion.iterrows():
+                    if row['Patología'] != patologia_mas_probable:
+                        st.markdown(
+                            f"<p style='text-align: center; font-size: 16px;'>"
+                            f"<strong>{traduccion_patologias[row['Patología']]}</strong> ({modelo}): {row['Probabilidad']:.2%}</p>",
+                            unsafe_allow_html=True
+                        )
 
         else:
             st.error("Por favor, sube un archivo .nii para asi predecir la patologia.")   
@@ -629,33 +649,27 @@ def calcular_patologia(norah_amygdala, asimetria_amygdala, norah_hippocampus, as
             'Norah_Hippocampus', 'Asimetria_Hippocampus', 
             'Norah_Thalamus', 'Asimetria_Thalamus']
     
-    
     indices_df = pd.DataFrame([indices], columns=columnas)
 
-
     # Escalar los índices utilizando el escalador cargado
-    #indices_scaled = scaler.transform(indices_array)
-    indices_scaled = scaler.transform(indices_df)
-    
-    # Verificar los valores escalados
-    #print("Índices originales:", indices)
-    #print("Índices escalados:", indices_scaled)
-    
-    # Realizar la predicción utilizando el modelo entrenado
-    probabilidades = modelo_entrenado.predict_proba(indices_scaled)
-    
-    # Obtener las clases del modelo
-    clases = modelo_entrenado.classes_
-    
-    # Crear un diccionario con las probabilidades y las clases
-    resultado = {clase: probabilidad for clase, probabilidad in zip(clases, probabilidades[0])}
-    
-    # Imprimir las probabilidades para depuración
-    print("Probabilidades:", probabilidades)
-    prediccion_clase = modelo_entrenado.predict(indices_scaled)
-    print(f"Clase predicha directamente: {prediccion_clase}")
-    
-    return resultado
+    indices_scaledSVM = scalerSVM.transform(indices_df)
+    indices_scaledKNN = scalerKNN.transform(indices_df)
+
+    resultados = {}
+
+    # Predicción con modelo 1 (SVM)
+    probabilidades1 = modelo_entrenadoSVM.predict_proba(indices_scaledSVM)
+    resultados["SVM"] = {clase: prob for clase, prob in zip(modelo_entrenadoSVM.classes_, probabilidades1[0])}
+
+    # Predicción con modelo 2 (Naive Bayes)
+    probabilidades2 = modelo_entrenadoKNN.predict_proba(indices_scaledKNN)
+    resultados["K-Nearest Neighbors"] = {clase: prob for clase, prob in zip(modelo_entrenadoKNN.classes_, probabilidades2[0])}
+
+    # Predicción con modelo 3 (Random Forest)
+    probabilidades3 = modelo_entrenadoRF.predict_proba(indices_df)
+    resultados["Random Forest"] = {clase: prob for clase, prob in zip(modelo_entrenadoRF.classes_, probabilidades3[0])}
+
+    return resultados
 
 #def calcular_indices(amygdala_left_path, amygdala_right_path, putamen_left_path, putamen_right_path, pallidum_left_path, pallidum_right_path, hippocampus_left_path, hippocampus_right_path, thalamus_left_path, thalamus_right_path):
 def calcular_indices(amygdala_left_path, amygdala_right_path, hippocampus_left_path, hippocampus_right_path, thalamus_left_path, thalamus_right_path):
