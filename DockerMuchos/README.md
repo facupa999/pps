@@ -1,5 +1,8 @@
 Modo de uso:
- 
+
+esto se puede usar para extraer de todas las segmentaciones (.mgz) en un directorio la estructura deseada dejando por cada imagen 2 archivos (de ambos lados homologos de la estructura) 
+de las extracciones y el directorio deseado.
+
 1. Construir la imagen Docker:
 
 docker build -t labelsmuchos .

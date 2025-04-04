@@ -566,7 +566,7 @@ def tab_4():
                 )
 
 def tab_5():
-    st.title("Prediccion de patologia")
+    st.title("Predicción de patología")
     with st.form("form_predecir"):
         uploaded_file3 = st.file_uploader("Subir archivo .mgz", type=["mgz"])
         if uploaded_file3 is not None:
@@ -984,7 +984,7 @@ def negative_occlusion(img, patch, stride, c, trainedModel):
     return occluded_baseline, negative_occluded_baseline, positive_occluded_baseline
 
 
-tab1, tab2, tab3, tab4, tab5 = st.tabs(["Segmentar Imagen", "Imagen ya Segmentada","imagenes" ,"Resultados", "Prediccion de patologia"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["Segmentar Imagen", "Imagen ya Segmentada","imágenes" ,"Resultados", "Predicción de patología"])
 with tab1:
     tab_1()
 
